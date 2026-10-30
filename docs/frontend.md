@@ -98,6 +98,29 @@ widget (`ageColor` in `live/format.ts`).
 
 ## Layout (state/layout.ts)
 
+Layouts support five charts and fifteen channel entries total. The Profiles
+button beside the version opens all profile controls for the active Live or
+Viewer layout. Named profiles are stored locally; Default is built in, and saved
+layouts can be replaced after confirmation or deleted. Profiles may also remember
+a finite Live time window and custom plot heights.
+
+Plots have resize handles at the upper- and lower-right corners. Drag up from the
+upper handle or down from the lower handle to set a custom height, use the arrow
+keys while a handle is focused for precise changes, or press Home/double-click to
+return to automatic sizing. Custom heights stay
+local and are not included in offline share codes because pixel sizes are specific
+to a window and display.
+
+Offline sharing hashes exact UTF-8 channel names with SHA-256. Version 1 uses
+22-bit prefixes for caches up to 256 names, or 32-bit prefixes for larger caches.
+The Base32 code includes chart counts and a CRC-16 for typing errors. Full
+five-chart layouts use 75 characters (22-bit) or 105 characters (32-bit), excluding
+optional spaces. Names learned from Live or opened logs are cached locally.
+Import previews the layout before applying it. Missing or ambiguous hashes remain
+unresolved and retry when new names arrive. Matching is disabled when cache size
+would exceed the conservative 0.1% ambiguity bound for fifteen entries. Hashes
+cannot reconstruct names that the recipient has never learned.
+
 A reducer for the list of plot panels and which one is active. Untouched
 panels keep their object identity so memoised plots don't rebuild. Removing
 the last panel empties it instead, so there's always one.

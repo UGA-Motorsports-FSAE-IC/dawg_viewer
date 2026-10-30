@@ -16,6 +16,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 function App() {
   const [tab, setTab] = useState<Tab>('live')
+  const [profileTarget, setProfileTarget] = useState<HTMLDivElement | null>(null)
   const version = useInfo()?.version
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(false)
@@ -39,7 +40,7 @@ function App() {
   }
 
   return (
-    <div className="flex h-full flex-col select-none">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden select-none">
       <nav className="flex items-center gap-1 border-b border-zinc-800 px-3">
         <h1 className="mr-4 text-sm font-semibold tracking-tight">Dawg Viewer</h1>
         {TABS.map((t) => (
@@ -56,10 +57,13 @@ function App() {
             {t.label}
           </button>
         ))}
-        {version && <span className="ml-auto text-xs text-zinc-600">v{version}</span>}
+        <div className="ml-auto flex items-center gap-2">
+          <div ref={setProfileTarget} />
+          {version && <span className="text-xs text-zinc-600">v{version}</span>}
+        </div>
       </nav>
       <div className={`min-h-0 flex-1 ${tab === 'live' ? '' : 'hidden'}`}>
-        <LiveView />
+        <LiveView profileTarget={tab === 'live' ? profileTarget : null} />
       </div>
       {tab === 'logs' && (
         <div className="min-h-0 flex-1">
@@ -72,6 +76,7 @@ function App() {
           loading={loading}
           error={error}
           onOpenFile={() => load(pickAndOpenLog)}
+          profileTarget={tab === 'viewer' ? profileTarget : null}
         />
       </div>
     </div>
