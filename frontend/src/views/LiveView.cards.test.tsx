@@ -86,4 +86,21 @@ it('searches to add any data point to the top and snaps plots in a bento layout'
   expect(screen.getByLabelText('Plot 2').className).toContain('col-span-1')
   expect(screen.getByLabelText('Plot 1')).toHaveTextContent('CLT1')
   expect(screen.getByLabelText('Plot 2')).toHaveTextContent('RPM')
+
+  // Drag right edge of Plot 1 to dynamically resize width, and bottom edge of Plot 2 to dynamically resize height
+  const rightEdge = screen.getByLabelText('Drag right edge of plot 1')
+  fireEvent.pointerDown(rightEdge, { clientX: 100, clientY: 100 })
+  fireEvent.pointerMove(document, { clientX: 120, clientY: 100 })
+  expect(screen.getByLabelText('Plot 1').style.width).toBe('calc(62.5% - 0.25rem)')
+  fireEvent.pointerMove(document, { clientX: 180, clientY: 100 })
+  fireEvent.pointerUp(document)
+  expect(screen.getByLabelText('Plot 1').className).toContain('col-span-2')
+
+  const bottomEdge = screen.getByLabelText('Drag bottom edge of plot 2')
+  fireEvent.pointerDown(bottomEdge, { clientX: 100, clientY: 100 })
+  fireEvent.pointerMove(document, { clientX: 100, clientY: 135 })
+  expect(screen.getByLabelText('Plot 2').style.height).toBe('419px')
+  fireEvent.pointerMove(document, { clientX: 100, clientY: 450 })
+  fireEvent.pointerUp(document)
+  expect(screen.getByLabelText('Plot 2').className).toContain('row-span-4')
 })

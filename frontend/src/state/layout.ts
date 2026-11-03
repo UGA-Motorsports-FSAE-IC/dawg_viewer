@@ -1,11 +1,16 @@
 export type BentoSpan = 1 | 2
+export type BentoRowSpan = 1 | 2 | 3 | 4
 export type SnapZone = 'left' | 'right' | 'top' | 'bottom'
+
+export const DEFAULT_ROW_HEIGHT = 192
 
 export interface Panel {
   id: number
   channelIds: string[]
   colSpan?: BentoSpan
-  rowSpan?: BentoSpan
+  rowSpan?: BentoRowSpan
+  widthPct?: number
+  height?: number
 }
 
 export interface Layout {
@@ -23,7 +28,14 @@ export type LayoutAction =
   | { type: 'movePanel'; fromId: number; toId: number; snap?: SnapZone }
   | { type: 'togglePanelWidth'; panelId: number }
   | { type: 'togglePanelHeight'; panelId: number }
-  | { type: 'resizePanel'; panelId: number; colSpan?: BentoSpan; rowSpan?: BentoSpan }
+  | {
+      type: 'resizePanel'
+      panelId: number
+      colSpan?: BentoSpan
+      rowSpan?: BentoRowSpan
+      widthPct?: number
+      height?: number
+    }
   | { type: 'setLayout'; layout: Layout }
 
 const PLOT_LAYOUT_KEY = 'dawg.live-plots.v1'
@@ -52,11 +64,74 @@ export function makeLayout(panels: string[][]): Layout {
 
 export function panelColSpan(panel: Panel, totalPanels = 2): BentoSpan {
   if (panel.colSpan) return panel.colSpan
+  if (panel.widthPct !== undefined) return panel.widthPct > 75 ? 2 : 1
   return totalPanels === 1 ? 2 : 1
 }
 
-export function panelRowSpan(panel: Panel): BentoSpan {
+export function panelWidthPct(panel: Panel, totalPanels = 2): number {
+  if (panel.widthPct !== undefined) return panel.widthPct
+  return panelColSpan(panel, totalPanels) === 2 ? 100 : 50
+}
+
+export function panelRowSpan(panel: Panel): BentoRowSpan {
   return panel.rowSpan ?? 1
+}
+
+export function panelHeightPx(panel: Panel): number | undefined {
+  return panel.height
+}
+
+export interface EdgeResizeResult {
+  colSpan?: BentoSpan
+  rowSpan?: BentoRowSpan
+  widthPct?: number
+  height?: number
+}
+
+export function computeEdgeResize(
+  edge: 'left' | 'right' | 'bottom' | 'corner',
+  dx: number,
+  dy: number,
+  startCol: BentoSpan,
+  startRow: BentoRowSpan,
+  opts?: {
+    startWidthPct?: number
+    startHeightPx?: number
+    containerWidthPx?: number
+  },
+): EdgeResizeResult {
+  const result: EdgeResizeResult = {}
+  const containerW =
+    opts?.containerWidthPx && opts.containerWidthPx > 0 ? opts.containerWidthPx : 160
+  const startPct = opts?.startWidthPct ?? (startCol === 2 ? 100 : 50)
+
+  if (edge === 'right' || edge === 'left' || edge === 'corner') {
+    const hDelta = edge === 'left' ? -dx : dx
+    const deltaPct = (hDelta / containerW) * 100
+    const nextPct = Math.max(20, Math.min(100, Number((startPct + deltaPct).toFixed(2))))
+    result.widthPct = nextPct
+    result.colSpan = nextPct > 75 ? 2 : 1
+  }
+
+  if (edge === 'bottom' || edge === 'corner') {
+    const startH =
+      opts?.startHeightPx && opts.startHeightPx > 0
+        ? opts.startHeightPx
+        : startRow * DEFAULT_ROW_HEIGHT
+    const nextH = Math.max(120, Math.round(startH + dy))
+    result.height = nextH
+    if (dy >= 30) {
+      const addRows = Math.max(1, Math.floor(dy / 160))
+      result.rowSpan = Math.min(4, startRow + addRows) as BentoRowSpan
+    } else if (dy <= -30) {
+      const subRows = Math.max(1, Math.floor(Math.abs(dy) / 160))
+      result.rowSpan = Math.max(1, startRow - subRows) as BentoRowSpan
+    } else {
+      result.rowSpan = startRow
+    }
+  }
+
+  return result
 }
 
 export function detectSnapZone(
@@ -111,12 +186,12 @@ export function movePanels(
 
   const newTargetIndex = next.findIndex((p) => p.id === toId)
   const insertAt = snap === 'left' || snap === 'top' ? newTargetIndex : newTargetIndex + 1
-  const snappedMoved =
-    snap === 'left' || snap === 'right' ? { ...moved, colSpan: 1 as BentoSpan } : moved
+  const snappedMoved: Panel =
+    snap === 'left' || snap === 'right' ? { ...moved, colSpan: 1, widthPct: 50 } : moved
   next.splice(insertAt, 0, snappedMoved)
 
   if (snap === 'left' || snap === 'right') {
-    return next.map((p) => (p.id === toId ? { ...p, colSpan: 1 as BentoSpan } : p))
+    return next.map((p) => (p.id === toId ? { ...p, colSpan: 1, widthPct: 50 } : p))
   }
   return next
 }
@@ -154,20 +229,28 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
     case 'togglePanelWidth':
       return {
         ...layout,
-        panels: layout.panels.map((p) =>
-          p.id === action.panelId
-            ? { ...p, colSpan: ((p.colSpan ?? 1) === 2 ? 1 : 2) as BentoSpan }
-            : p,
-        ),
+        panels: layout.panels.map((p) => {
+          if (p.id !== action.panelId) return p
+          const nextSpan: BentoSpan = (p.colSpan ?? 1) === 2 ? 1 : 2
+          return {
+            ...p,
+            colSpan: nextSpan,
+            widthPct: nextSpan === 2 ? 100 : 50,
+          }
+        }),
       }
     case 'togglePanelHeight':
       return {
         ...layout,
-        panels: layout.panels.map((p) =>
-          p.id === action.panelId
-            ? { ...p, rowSpan: ((p.rowSpan ?? 1) === 2 ? 1 : 2) as BentoSpan }
-            : p,
-        ),
+        panels: layout.panels.map((p) => {
+          if (p.id !== action.panelId) return p
+          const nextRow: BentoRowSpan = (p.rowSpan ?? 1) >= 2 ? 1 : 2
+          return {
+            ...p,
+            rowSpan: nextRow,
+            height: nextRow * DEFAULT_ROW_HEIGHT,
+          }
+        }),
       }
     case 'resizePanel':
       return {
@@ -178,6 +261,8 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
                 ...p,
                 colSpan: action.colSpan ?? p.colSpan,
                 rowSpan: action.rowSpan ?? p.rowSpan,
+                widthPct: action.widthPct ?? p.widthPct,
+                height: action.height ?? p.height,
               }
             : p,
         ),
@@ -208,11 +293,24 @@ export function loadPlotLayout(profile: string, fallback: Layout): Layout {
       )
         return fallback
       if (p.colSpan !== undefined && p.colSpan !== 1 && p.colSpan !== 2) return fallback
-      if (p.rowSpan !== undefined && p.rowSpan !== 1 && p.rowSpan !== 2) return fallback
+      if (
+        p.rowSpan !== undefined &&
+        p.rowSpan !== 1 &&
+        p.rowSpan !== 2 &&
+        p.rowSpan !== 3 &&
+        p.rowSpan !== 4
+      )
+        return fallback
       ids.add(p.id)
       const panel: Panel = { id: p.id, channelIds: p.channelIds as string[] }
       if (p.colSpan) panel.colSpan = p.colSpan
       if (p.rowSpan) panel.rowSpan = p.rowSpan
+      if (typeof p.widthPct === 'number' && p.widthPct >= 20 && p.widthPct <= 100) {
+        panel.widthPct = p.widthPct
+      }
+      if (typeof p.height === 'number' && p.height >= 120 && p.height <= 1200) {
+        panel.height = p.height
+      }
       panels.push(panel)
     }
     const maxId = Math.max(...panels.map((p) => p.id))

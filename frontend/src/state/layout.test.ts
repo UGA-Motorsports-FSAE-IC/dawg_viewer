@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  computeEdgeResize,
   detectSnapZone,
   layoutReducer,
   loadPlotLayout,
@@ -80,6 +81,33 @@ describe('layoutReducer', () => {
     expect(detectSnapZone(100, 95, rect, 0, 1)).toBe('bottom')
     expect(detectSnapZone(0, 0, { left: 0, top: 0, width: 0, height: 0 }, 0, 1)).toBe('right')
     expect(detectSnapZone(0, 0, { left: 0, top: 0, width: 0, height: 0 }, 2, 0)).toBe('left')
+
+    expect(computeEdgeResize('right', 50, 0, 1, 1)).toEqual({
+      colSpan: 2,
+      widthPct: 81.25,
+    })
+    expect(computeEdgeResize('left', -50, 0, 1, 1)).toEqual({
+      colSpan: 2,
+      widthPct: 81.25,
+    })
+    expect(computeEdgeResize('bottom', 0, 25, 1, 1)).toEqual({
+      rowSpan: 1,
+      height: 217,
+    })
+    expect(computeEdgeResize('bottom', 0, 60, 1, 1)).toEqual({
+      rowSpan: 2,
+      height: 252,
+    })
+    expect(computeEdgeResize('bottom', 0, 350, 1, 1)).toEqual({
+      rowSpan: 3,
+      height: 542,
+    })
+    expect(computeEdgeResize('corner', 60, 80, 1, 1)).toEqual({
+      colSpan: 2,
+      widthPct: 87.5,
+      rowSpan: 2,
+      height: 272,
+    })
   })
 
   it('saves and loads plot bento layouts per profile', () => {
