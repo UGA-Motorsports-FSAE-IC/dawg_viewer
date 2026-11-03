@@ -78,34 +78,86 @@ func appDir() (string, error) {
 	return dir, nil
 }
 
+const offeredFile = "offered_devices.txt"
+
 func seed(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	_, statErr := os.Stat(filepath.Join(dir, "devices"))
-	seedDevices := errors.Is(statErr, fs.ErrNotExist)
-
-	return fs.WalkDir(defaults, "defaults", func(p string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(defaults, "defaults", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || p == "defaults" {
 			return err
 		}
 		rel := strings.TrimPrefix(p, "defaults/")
-		if strings.HasPrefix(rel, "devices") && !seedDevices {
+		if strings.HasPrefix(rel, "devices") {
 			return nil
 		}
 		dst := filepath.Join(dir, filepath.FromSlash(rel))
 		if d.IsDir() {
 			return os.MkdirAll(dst, 0o755)
 		}
-		if _, err := os.Stat(dst); err == nil {
-			return nil
+		return writeIfMissing(dst, p)
+	})
+	if err != nil {
+		return err
+	}
+	return seedDevices(dir)
+}
+
+func seedDevices(dir string) error {
+	devDir := filepath.Join(dir, "devices")
+	if err := os.MkdirAll(devDir, 0o755); err != nil {
+		return err
+	}
+	offeredPath := filepath.Join(dir, "cache", offeredFile)
+	offered := map[string]bool{}
+	if b, err := os.ReadFile(offeredPath); err == nil {
+		for _, line := range strings.Split(string(b), "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				offered[line] = true
+			}
 		}
-		b, err := defaults.ReadFile(p)
-		if err != nil {
+	}
+
+	entries, err := fs.ReadDir(defaults, "defaults/devices")
+	if err != nil {
+		return err
+	}
+	changed := false
+	for _, e := range entries {
+		if e.IsDir() || offered[e.Name()] {
+			continue
+		}
+		if err := writeIfMissing(filepath.Join(devDir, e.Name()), "defaults/devices/"+e.Name()); err != nil {
 			return err
 		}
-		return os.WriteFile(dst, b, 0o644)
-	})
+		offered[e.Name()] = true
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+
+	names := make([]string, 0, len(offered))
+	for n := range offered {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	if err := os.MkdirAll(filepath.Dir(offeredPath), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(offeredPath, []byte(strings.Join(names, "\n")+"\n"), 0o644)
+}
+
+func writeIfMissing(dst, embedded string) error {
+	if _, err := os.Stat(dst); err == nil {
+		return nil
+	}
+	b, err := defaults.ReadFile(embedded)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, b, 0o644)
 }
 
 type Settings struct {

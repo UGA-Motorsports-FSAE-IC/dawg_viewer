@@ -24,9 +24,13 @@ Checked in this order:
    `~/Library/Application Support/DawgViewer`, `~/.config/DawgViewer`.
 
 Whichever folder is used, missing top-level files are filled in from the
-defaults built into the app. Default device profiles are only written when
-there is no `devices/` folder yet, so a profile you delete stays deleted. No
-existing file is ever overwritten.
+defaults built into the app. Each built-in device profile is offered once: it
+is copied into `devices/` the first time a version of the app that contains it
+starts, and recorded in `cache/offered_devices.txt`. So a profile added in a
+new release (like `base_station.yaml`) appears by itself, and a profile you
+delete stays deleted. Deleting `cache/` makes the app offer the built-in
+profiles you don't have once more. No existing file is ever overwritten, so
+changes to a built-in profile you already have don't reach your copy.
 
 ## settings.yaml
 

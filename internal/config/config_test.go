@@ -1,6 +1,7 @@
 package config
 
 import (
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
@@ -82,8 +83,9 @@ func TestBadProfilesAreReportedNotFatal(t *testing.T) {
 	os.WriteFile(filepath.Join(dev, "noid.yaml"), []byte("name: nothing\n"), 0o644)
 	os.WriteFile(filepath.Join(dev, "zdup.yaml"), []byte("id: g26-iltm\n"), 0o644)
 
+	builtIn, _ := fs.ReadDir(defaults, "defaults/devices")
 	profiles, bad := LoadProfiles(dir)
-	if len(profiles) != 2 || len(bad) != 3 {
+	if len(profiles) != len(builtIn) || len(bad) != 3 {
 		t.Fatalf("got %d profiles, %d errors: %+v", len(profiles), len(bad), bad)
 	}
 	joined := ""
@@ -176,5 +178,33 @@ func TestDefaultProfilesShowOnlyTheTranslatedGear(t *testing.T) {
 		if p.Channels["Gear"].Pinned {
 			t.Errorf("%s: the untranslated ECU gear is still pinned", p.ID)
 		}
+	}
+}
+
+func TestNewBuiltInProfilesReachExistingFolders(t *testing.T) {
+	dir := t.TempDir()
+	dev := filepath.Join(dir, "devices")
+	os.MkdirAll(dev, 0o755)
+	os.WriteFile(filepath.Join(dev, "g26_iltm.yaml"), []byte("id: g26-iltm\nname: Mine\n"), 0o644)
+
+	if _, err := Locate(dir); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dev, "g26_iltm.yaml")); string(b) != "id: g26-iltm\nname: Mine\n" {
+		t.Fatalf("existing profile overwritten: %q", b)
+	}
+	builtIn, _ := fs.ReadDir(defaults, "defaults/devices")
+	for _, e := range builtIn {
+		if _, err := os.Stat(filepath.Join(dev, e.Name())); err != nil {
+			t.Errorf("built-in profile %s not added to an existing folder", e.Name())
+		}
+	}
+
+	os.Remove(filepath.Join(dev, "base_station.yaml"))
+	if _, err := Locate(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dev, "base_station.yaml")); err == nil {
+		t.Fatal("a profile the user deleted came back")
 	}
 }

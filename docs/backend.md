@@ -255,9 +255,11 @@ See [configuration.md](configuration.md) for the user-facing side.
   portable `dawg_config` next to the app, then the user config folder.
 - `appDir` is the folder the user sees: the executable's folder, or the
   folder holding the `.app` bundle on macOS.
-- `seed` writes missing top-level default files, and the default device
-  profiles only when there is no `devices/` folder yet. Existing files are
-  never overwritten, and deleted profiles stay deleted.
+- `seed` writes missing top-level default files, and offers each built-in
+  device profile once: it is copied if missing, and its file name is recorded
+  in `cache/offered_devices.txt` so it isn't offered again. A profile added to
+  a new version of the app therefore reaches existing config folders, while
+  one the user deleted stays deleted. Existing files are never overwritten.
 - YAML is decoded with `KnownFields(true)` so typos like `adress:` are
   reported. `LoadProfiles` reports broken files individually instead of
   failing them all; duplicate ids are rejected.

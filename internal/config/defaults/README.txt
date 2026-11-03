@@ -4,8 +4,9 @@ Dawg Viewer configuration folder
 settings.yaml   App settings: which device to connect to, refresh rate, etc.
 devices/        One YAML file per device the app can read data from. Copy a
                 file and change its "id" to add a new car, logger or simulator.
-cache/          Written by the app (e.g. the last known signal names for each
-                device). Safe to delete.
+cache/          Written by the app: the last known signal names for each
+                device, and which built-in device profiles you've been given.
+                Safe to delete; built-in profiles you removed come back once.
 logs/           Downloaded and converted logs (unless settings.yaml says
                 otherwise).
 
