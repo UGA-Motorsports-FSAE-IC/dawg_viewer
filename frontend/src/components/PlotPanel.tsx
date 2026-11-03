@@ -53,7 +53,7 @@ export const PlotPanel = memo(function PlotPanel({
 
   return (
     <section
-      className={`flex min-h-48 flex-1 flex-col border-l-2 bg-zinc-950 ${
+      className={`flex min-h-48 w-full min-w-0 flex-1 flex-col overflow-hidden border-l-2 bg-zinc-950 ${
         active ? 'border-red-500' : 'border-transparent'
       }`}
       onPointerDown={() => dispatch({ type: 'setActive', panelId: panel.id })}
@@ -98,7 +98,7 @@ export const PlotPanel = memo(function PlotPanel({
         </button>
       </header>
 
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
         {channels.length === 0 ? (
           <p className="absolute inset-0 grid place-items-center text-sm text-zinc-600">
             Pick channels from the list to plot them here
