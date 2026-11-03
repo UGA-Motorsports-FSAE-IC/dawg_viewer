@@ -5,7 +5,7 @@ import { StatusBar } from '../components/StatusBar'
 import type { Session } from '../data/session'
 import { createViewSync } from '../plot/sync'
 import { layoutReducer, makeLayout } from '../state/layout'
-import { toolbarButton } from '../ui'
+import { plotStack, toolbarButton } from '../ui'
 import { startingPanels } from '../viewer/openLog'
 
 const sync = createViewSync('viewer')
@@ -20,7 +20,7 @@ interface Props {
 
 export function ViewerView({ session, loading, error, onOpenFile }: Props) {
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden">
       {session ? (
         <LoadedLog key={session.path} session={session} onOpenFile={onOpenFile} loading={loading} />
       ) : (
@@ -60,7 +60,7 @@ function LoadedLog({
 
   return (
     <>
-      <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-1.5">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-zinc-800 px-3 py-1.5">
         <button type="button" className={toolbarButton} disabled={loading} onClick={onOpenFile}>
           {loading ? 'Opening…' : 'Open log…'}
         </button>
@@ -86,7 +86,7 @@ function LoadedLog({
           selectedIds={activePanel?.channelIds ?? NO_CHANNELS}
           dispatch={dispatch}
         />
-        <main className="flex min-w-0 flex-1 flex-col gap-px overflow-y-auto bg-zinc-800">
+        <main className={plotStack}>
           {layout.panels.map((panel, i) => (
             <PlotPanel
               key={panel.id}
