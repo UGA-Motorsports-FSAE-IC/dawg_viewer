@@ -8,9 +8,19 @@ interface Props {
   channels: ListChannel[]
   selectedIds: string[]
   dispatch: Dispatch<LayoutAction>
+  onSelectCard?: (id: string) => void
+  cardEditMode?: boolean
+  listRef?: React.Ref<HTMLElement>
 }
 
-export const ChannelList = memo(function ChannelList({ channels, selectedIds, dispatch }: Props) {
+export const ChannelList = memo(function ChannelList({
+  channels,
+  selectedIds,
+  dispatch,
+  onSelectCard,
+  cardEditMode,
+  listRef,
+}: Props) {
   const [query, setQuery] = useState('')
 
   const groups = useMemo(() => {
@@ -28,7 +38,10 @@ export const ChannelList = memo(function ChannelList({ channels, selectedIds, di
   const selected = useMemo(() => new Set(selectedIds), [selectedIds])
 
   return (
-    <aside className="flex w-60 max-w-[30%] shrink-0 flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900/40">
+    <aside
+      ref={listRef}
+      className="flex w-60 max-w-[30%] shrink-0 flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900/40"
+    >
       <div className="border-b border-zinc-800 p-2">
         <input
           aria-label="Filter channels"
@@ -56,11 +69,15 @@ export const ChannelList = memo(function ChannelList({ channels, selectedIds, di
                 <button
                   key={ch.id}
                   type="button"
-                  aria-pressed={on}
+                  aria-pressed={cardEditMode ? undefined : on}
                   className={`flex w-full items-center gap-2 px-3 py-1 text-left text-sm hover:bg-zinc-800 ${
                     on ? 'text-zinc-100' : 'text-zinc-400'
                   }`}
-                  onClick={() => dispatch({ type: 'toggleChannel', channelId: ch.id })}
+                  onClick={() =>
+                    cardEditMode
+                      ? onSelectCard?.(ch.id)
+                      : dispatch({ type: 'toggleChannel', channelId: ch.id })
+                  }
                 >
                   <span
                     className="size-2.5 shrink-0 rounded-sm border"
