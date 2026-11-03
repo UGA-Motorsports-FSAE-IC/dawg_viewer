@@ -91,6 +91,7 @@ function LoadedLog({
             <PlotPanel
               key={panel.id}
               panel={panel}
+              panels={layout.panels}
               index={i}
               active={panel.id === layout.activeId}
               session={session}

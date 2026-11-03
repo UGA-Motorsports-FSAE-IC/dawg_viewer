@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChannelMeta } from '../../bindings/dawg_viewer/internal/config/models'
 import { status, store } from './connection'
 import { ageColor, formatValue, level } from './format'
@@ -17,6 +17,7 @@ interface CardEls {
 
 export const PinnedCards = memo(function PinnedCards({
   metas,
+  channels,
   cards,
   editing,
   onEdit,
@@ -24,6 +25,7 @@ export const PinnedCards = memo(function PinnedCards({
   cardRef,
 }: {
   metas: Record<string, ChannelMeta | undefined>
+  channels?: string[]
   cards: CardItem[]
   editing: boolean
   onEdit: () => void
@@ -33,10 +35,50 @@ export const PinnedCards = memo(function PinnedCards({
   const els = useRef(new Map<string, CardEls>())
   const dragged = useRef<string | null>(null)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   const clearDrag = () => {
     dragged.current = null
     setDropTarget(null)
+  }
+
+  const pinned = useMemo(() => new Set(cards.map((c) => c.name)), [cards])
+
+  const allCandidates = useMemo(() => {
+    const names = new Set<string>([...(channels ?? []), ...Object.keys(metas)])
+    return [...names].sort(
+      (a, b) => (metas[a]?.order ?? 999) - (metas[b]?.order ?? 999) || a.localeCompare(b),
+    )
+  }, [channels, metas])
+
+  const matches = useMemo(() => {
+    const trimmed = query.trim()
+    if (!trimmed) return []
+    const q = trimmed.toLowerCase()
+    const filtered = allCandidates.filter((name) => {
+      if (pinned.has(name)) return false
+      const meta = metas[name]
+      return (
+        name.toLowerCase().includes(q) ||
+        (meta?.label ?? '').toLowerCase().includes(q) ||
+        (meta?.unit ?? '').toLowerCase().includes(q)
+      )
+    })
+    if (
+      !pinned.has(trimmed) &&
+      !filtered.some((name) => name.toLowerCase() === q) &&
+      !Array.from(pinned).some((name) => name.toLowerCase() === q)
+    ) {
+      filtered.push(trimmed)
+    }
+    return filtered
+  }, [allCandidates, metas, pinned, query])
+
+  const addCard = (name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed || pinned.has(trimmed)) return
+    onCards([...cards, { name: trimmed, wide: false }])
+    setQuery('')
   }
 
   useEffect(() => {
@@ -185,14 +227,64 @@ export const PinnedCards = memo(function PinnedCards({
           )
         })}
       </div>
-      <div className="mt-1 text-right text-[10px] text-zinc-500">
-        {editing ? (
-          'Click outside to save · Double click a card to resize'
-        ) : (
-          <button type="button" onClick={onEdit}>
-            Double click to edit
-          </button>
-        )}
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+          <input
+            type="search"
+            aria-label="Search data points"
+            placeholder="Search data points to add…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && matches.length > 0) {
+                event.preventDefault()
+                event.stopPropagation()
+                addCard(matches[0])
+              } else if (event.key === 'Escape' && query) {
+                event.stopPropagation()
+                setQuery('')
+              }
+            }}
+            className="w-48 max-w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-red-500"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          {query.trim() !== '' &&
+            (matches.length > 0 ? (
+              <div
+                role="listbox"
+                aria-label="Matching data points"
+                className="flex flex-wrap items-center gap-1"
+              >
+                {matches.map((name) => {
+                  const meta = metas[name]
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      aria-label={`Add ${name} card`}
+                      onClick={() => addCard(name)}
+                      className="flex items-center gap-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-200 hover:border-red-500 hover:bg-zinc-800"
+                    >
+                      <span>{meta?.label ? `${meta.label} (${name})` : `+ ${name}`}</span>
+                      {meta?.unit && <span className="text-zinc-500">{meta.unit}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <span className="text-xs text-zinc-500">Already pinned</span>
+            ))}
+        </div>
+        <div className="text-right text-[10px] text-zinc-500">
+          {editing ? (
+            'Click outside to save · Double click a card to resize'
+          ) : (
+            <button type="button" onClick={onEdit}>
+              Double click to edit
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

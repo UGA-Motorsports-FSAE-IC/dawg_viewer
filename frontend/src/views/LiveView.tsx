@@ -7,7 +7,7 @@ import { PinnedCards } from '../live/PinnedCards'
 import { loadCards, saveCards, type CardItem } from '../live/cardLayout'
 import { StatusHeader } from '../live/StatusHeader'
 import { liveSync, resumeFollow, showWindow, useFollow } from '../live/follow'
-import { layoutReducer, makeLayout } from '../state/layout'
+import { layoutReducer, loadPlotLayout, makeLayout, savePlotLayout } from '../state/layout'
 import { plotStack, toolbarButton, toolbarButtonActive } from '../ui'
 
 const initialLayout = makeLayout([
@@ -41,10 +41,22 @@ export function LiveView() {
   const [editingCards, setEditingCards] = useState(false)
   const cardsRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLElement>(null)
+  const [layout, dispatch] = useReducer(layoutReducer, profile, (p) =>
+    loadPlotLayout(p, initialLayout),
+  )
+  const layoutProfileRef = useRef(profile)
   if (cardState.profile !== profile) {
     setCardState({ profile, cards: loadCards(profile, metas) })
     setEditingCards(false)
   }
+  useEffect(() => {
+    if (layoutProfileRef.current !== profile) {
+      layoutProfileRef.current = profile
+      dispatch({ type: 'setLayout', layout: loadPlotLayout(profile, initialLayout) })
+      return
+    }
+    savePlotLayout(profile, layout)
+  }, [profile, layout])
   useEffect(() => {
     if (!editingCards) return
     const finish = (event: PointerEvent) => {
@@ -69,24 +81,36 @@ export function LiveView() {
       document.removeEventListener('keydown', finishKey)
     }
   }, [editingCards, cards, profile])
-  const updateCards = (next: CardItem[]) => setCardState({ profile, cards: next })
-  const [layout, dispatch] = useReducer(layoutReducer, initialLayout)
+  const updateCards = (next: CardItem[]) => {
+    setCardState({ profile, cards: next })
+    saveCards(profile, next)
+  }
   const activePanel = layout.panels.find((p) => p.id === layout.activeId)
 
   const { follow, windowS } = useFollow()
 
   const known = useMemo(() => new Set(channels.map((c) => c.name)), [channels])
-  const listChannels = useMemo<ListChannel[]>(
-    () =>
-      channels.map((c) => ({
-        id: c.name,
-        name: metas[c.name]?.label ? `${metas[c.name]?.label} (${c.name})` : c.name,
-        group: c.id >= 0 ? 'From device' : 'Computed',
-        unit: metas[c.name]?.unit ?? '',
-        color: colorFor(c.name),
-      })),
-    [channels, metas],
-  )
+  const channelNames = useMemo(() => channels.map((c) => c.name), [channels])
+  const listChannels = useMemo<ListChannel[]>(() => {
+    const out: ListChannel[] = channels.map((c) => ({
+      id: c.name,
+      name: metas[c.name]?.label ? `${metas[c.name]?.label} (${c.name})` : c.name,
+      group: c.id >= 0 ? 'From device' : 'Computed',
+      unit: metas[c.name]?.unit ?? '',
+      color: colorFor(c.name),
+    }))
+    for (const name of Object.keys(metas)) {
+      if (known.has(name)) continue
+      out.push({
+        id: name,
+        name: metas[name]?.label ? `${metas[name]?.label} (${name})` : name,
+        group: 'From device',
+        unit: metas[name]?.unit ?? '',
+        color: colorFor(name),
+      })
+    }
+    return out
+  }, [channels, known, metas])
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden">
@@ -107,6 +131,7 @@ export function LiveView() {
           <PinnedCards
             cardRef={cardsRef}
             metas={metas}
+            channels={channelNames}
             cards={cards}
             editing={editingCards}
             onEdit={() => setEditingCards(true)}
@@ -144,6 +169,7 @@ export function LiveView() {
               <LivePlotPanel
                 key={panel.id}
                 panel={panel}
+                panels={layout.panels}
                 index={i}
                 active={panel.id === layout.activeId}
                 known={known}

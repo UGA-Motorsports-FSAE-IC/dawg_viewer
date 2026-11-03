@@ -27,7 +27,14 @@ export const ChannelList = memo(function ChannelList({
     const q = query.trim().toLowerCase()
     const out = new Map<string, ListChannel[]>()
     for (const ch of channels) {
-      if (q && !ch.name.toLowerCase().includes(q) && !ch.group.toLowerCase().includes(q)) continue
+      if (
+        q &&
+        !ch.id.toLowerCase().includes(q) &&
+        !ch.name.toLowerCase().includes(q) &&
+        !ch.unit.toLowerCase().includes(q) &&
+        !ch.group.toLowerCase().includes(q)
+      )
+        continue
       const list = out.get(ch.group)
       if (list) list.push(ch)
       else out.set(ch.group, [ch])
