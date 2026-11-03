@@ -1,11 +1,12 @@
 import { useEffect, useReducer } from 'react'
 import { ChannelList } from '../components/ChannelList'
+import { PlotStack } from '../components/PlotStack'
 import { PlotPanel } from '../components/PlotPanel'
 import { StatusBar } from '../components/StatusBar'
 import type { Session } from '../data/session'
 import { createViewSync } from '../plot/sync'
 import { layoutReducer, makeLayout } from '../state/layout'
-import { plotStack, toolbarButton } from '../ui'
+import { toolbarButton } from '../ui'
 import { startingPanels } from '../viewer/openLog'
 
 const sync = createViewSync('viewer')
@@ -86,11 +87,14 @@ function LoadedLog({
           selectedIds={activePanel?.channelIds ?? NO_CHANNELS}
           dispatch={dispatch}
         />
-        <main className={plotStack}>
-          {layout.panels.map((panel, i) => (
+        <PlotStack
+          panels={layout.panels}
+          dispatch={dispatch}
+          renderPanel={(panel, i) => (
             <PlotPanel
               key={panel.id}
               panel={panel}
+              slotted
               panels={layout.panels}
               index={i}
               active={panel.id === layout.activeId}
@@ -98,8 +102,8 @@ function LoadedLog({
               sync={sync}
               dispatch={dispatch}
             />
-          ))}
-        </main>
+          )}
+        />
       </div>
 
       <StatusBar session={session} sync={sync} />

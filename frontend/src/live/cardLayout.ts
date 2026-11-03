@@ -5,6 +5,8 @@ export interface CardItem {
   wide: boolean
 }
 
+export type CardDropPosition = 'before' | 'after'
+
 const KEY = 'dawg.live-cards.v1'
 
 export function defaultCards(metas: Record<string, ChannelMeta | undefined>): CardItem[] {
@@ -65,5 +67,21 @@ export function moveCard(cards: CardItem[], from: string, to: string): CardItem[
   if (source < 0 || target < 0 || source === target) return cards
   const next = [...cards]
   next.splice(target, 0, ...next.splice(source, 1))
+  return next
+}
+
+export function previewCardMove(
+  cards: CardItem[],
+  from: string,
+  to: string,
+  position: CardDropPosition,
+): CardItem[] {
+  if (from === to) return cards
+  const source = cards.findIndex((card) => card.name === from)
+  if (source < 0 || !cards.some((card) => card.name === to)) return cards
+
+  const next = cards.filter((card) => card.name !== from)
+  const target = next.findIndex((card) => card.name === to)
+  next.splice(target + (position === 'after' ? 1 : 0), 0, cards[source])
   return next
 }

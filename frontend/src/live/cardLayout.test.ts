@@ -1,5 +1,5 @@
 import { beforeEach, expect, it } from 'vitest'
-import { defaultCards, loadCards, moveCard, saveCards } from './cardLayout'
+import { defaultCards, loadCards, moveCard, previewCardMove, saveCards } from './cardLayout'
 
 beforeEach(() => localStorage.clear())
 
@@ -43,4 +43,23 @@ it('rejects malformed cards and moves a card to its drop target', () => {
       'RPM',
     ).map((card) => card.name),
   ).toEqual(['VSS', 'RPM'])
+})
+
+it('previews inserting a card on either side of a drop target', () => {
+  const cards = [
+    { name: 'RPM', wide: true },
+    { name: 'VSS', wide: false },
+    { name: 'TPS1', wide: false },
+  ]
+  expect(previewCardMove(cards, 'RPM', 'VSS', 'after').map((card) => card.name)).toEqual([
+    'VSS',
+    'RPM',
+    'TPS1',
+  ])
+  expect(previewCardMove(cards, 'TPS1', 'RPM', 'before').map((card) => card.name)).toEqual([
+    'TPS1',
+    'RPM',
+    'VSS',
+  ])
+  expect(previewCardMove(cards, 'RPM', 'missing', 'before')).toBe(cards)
 })

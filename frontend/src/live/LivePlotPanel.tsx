@@ -5,10 +5,7 @@ import { mountPlot } from '../plot/mountPlot'
 import type { ViewSync } from '../plot/sync'
 import {
   DEFAULT_ROW_HEIGHT,
-  clearPlotDrag,
   computeEdgeResize,
-  detectSnapZone,
-  getPlotDrag,
   panelColSpan,
   panelHeightPx,
   panelRowSpan,
@@ -16,7 +13,6 @@ import {
   setPlotDrag,
   type LayoutAction,
   type Panel,
-  type SnapZone,
 } from '../state/layout'
 import { bentoPanelClass, panelWidthStyle } from '../ui'
 import { colorFor, store } from './connection'
@@ -27,6 +23,7 @@ type ResizeEdge = 'left' | 'right' | 'bottom' | 'corner'
 interface Props {
   panel: Panel
   panels?: Panel[]
+  slotted?: boolean
   index: number
   active: boolean
   known: ReadonlySet<string>
@@ -42,6 +39,7 @@ function plotData(names: string[]): uPlot.AlignedData {
 export const LivePlotPanel = memo(function LivePlotPanel({
   panel,
   panels,
+  slotted = false,
   index,
   active,
   known,
@@ -52,8 +50,6 @@ export const LivePlotPanel = memo(function LivePlotPanel({
   const sectionRef = useRef<HTMLElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const valueEls = useRef(new Map<string, HTMLSpanElement>())
-  const [isDragging, setIsDragging] = useState(false)
-  const [snapZone, setSnapZone] = useState<SnapZone | null>(null)
   const [activeEdge, setActiveEdge] = useState<ResizeEdge | null>(null)
 
   const totalPanels = panels?.length ?? 2
@@ -117,7 +113,7 @@ export const LivePlotPanel = memo(function LivePlotPanel({
     const startWidthPct = widthPct
     const rect = sectionRef.current?.getBoundingClientRect()
     const startHeightPx = rect && rect.height > 0 ? rect.height : heightPx
-    const containerWidthPx = sectionRef.current?.parentElement?.clientWidth ?? 0
+    const containerWidthPx = (slotted ? sectionRef.current?.parentElement?.parentElement : sectionRef.current?.parentElement)?.clientWidth ?? 0
 
     setActiveEdge(edge)
 
@@ -131,7 +127,7 @@ export const LivePlotPanel = memo(function LivePlotPanel({
       })
       if (sectionRef.current) {
         if (next.widthPct !== undefined) {
-          sectionRef.current.style.width = panelWidthStyle(next.widthPct)
+          sectionRef.current.style.width = slotted ? '100%' : panelWidthStyle(next.widthPct)
         }
         if (next.height !== undefined) {
           sectionRef.current.style.height = `${next.height}px`
@@ -164,10 +160,10 @@ export const LivePlotPanel = memo(function LivePlotPanel({
     <section
       ref={sectionRef}
       aria-label={`Plot ${index + 1}`}
-      data-snap={snapZone ?? undefined}
+      data-panel-id={panel.id}
       draggable={activeEdge === null}
       style={{
-        width: panelWidthStyle(widthPct),
+        width: slotted ? '100%' : panelWidthStyle(widthPct),
         height: `${heightPx}px`,
       }}
       onDragStart={(event) => {
@@ -176,48 +172,9 @@ export const LivePlotPanel = memo(function LivePlotPanel({
           return
         }
         setPlotDrag(panel.id, index)
-        setIsDragging(true)
-        setSnapZone(null)
         if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
       }}
-      onDragOver={(event) => {
-        const drag = getPlotDrag()
-        if (!drag || drag.id === panel.id) return
-        event.preventDefault()
-        const rect = sectionRef.current?.getBoundingClientRect() ?? {
-          left: 0,
-          top: 0,
-          width: 0,
-          height: 0,
-        }
-        const zone = detectSnapZone(event.clientX, event.clientY, rect, drag.index, index)
-        if (snapZone !== zone) setSnapZone(zone)
-      }}
-      onDragLeave={() => setSnapZone(null)}
-      onDrop={(event) => {
-        event.preventDefault()
-        const drag = getPlotDrag()
-        if (drag && drag.id !== panel.id) {
-          const rect = sectionRef.current?.getBoundingClientRect() ?? {
-            left: 0,
-            top: 0,
-            width: 0,
-            height: 0,
-          }
-          const zone =
-            snapZone ?? detectSnapZone(event.clientX, event.clientY, rect, drag.index, index)
-          dispatch({ type: 'movePanel', fromId: drag.id, toId: panel.id, snap: zone })
-        }
-        setSnapZone(null)
-        setIsDragging(false)
-        clearPlotDrag()
-      }}
-      onDragEnd={() => {
-        setSnapZone(null)
-        setIsDragging(false)
-        clearPlotDrag()
-      }}
-      className={bentoPanelClass(active, colSpan, rowSpan, isDragging, snapZone)}
+      className={bentoPanelClass(active, colSpan, rowSpan)}
       onPointerDown={() => dispatch({ type: 'setActive', panelId: panel.id })}
     >
       <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-1 text-xs">
@@ -260,10 +217,10 @@ export const LivePlotPanel = memo(function LivePlotPanel({
                 aria-label={`Move plot ${index + 1} left`}
                 disabled={prevId === undefined}
                 className="text-zinc-500 hover:text-zinc-200 disabled:opacity-30"
-                onClick={() =>
-                  prevId !== undefined &&
-                  dispatch({ type: 'movePanel', fromId: panel.id, toId: prevId })
-                }
+                onClick={() => {
+                  const slot = panels?.[index - 1]?.slot
+                  if (slot) dispatch({ type: 'placePanel', panelId: panel.id, ...slot })
+                }}
               >
                 ←
               </button>
@@ -272,10 +229,10 @@ export const LivePlotPanel = memo(function LivePlotPanel({
                 aria-label={`Move plot ${index + 1} right`}
                 disabled={nextId === undefined}
                 className="text-zinc-500 hover:text-zinc-200 disabled:opacity-30"
-                onClick={() =>
-                  nextId !== undefined &&
-                  dispatch({ type: 'movePanel', fromId: panel.id, toId: nextId })
-                }
+                onClick={() => {
+                  const slot = panels?.[index + 1]?.slot
+                  if (slot) dispatch({ type: 'placePanel', panelId: panel.id, ...slot })
+                }}
               >
                 →
               </button>

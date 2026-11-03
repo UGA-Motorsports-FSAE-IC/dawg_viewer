@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChannelMeta } from '../../bindings/dawg_viewer/internal/config/models'
 import { status, store } from './connection'
 import { ageColor, formatValue, level } from './format'
-import { moveCard, type CardItem } from './cardLayout'
+import { moveCard, previewCardMove, type CardDropPosition, type CardItem } from './cardLayout'
 
 const LEVEL_BG = {
   ok: 'rgb(24 24 27)',
@@ -14,6 +14,12 @@ interface CardEls {
   root: HTMLDivElement
   value: HTMLSpanElement
   dot: HTMLSpanElement | null
+}
+
+interface CardDropPreview {
+  source: string
+  target: string
+  position: CardDropPosition
 }
 
 export const PinnedCards = memo(function PinnedCards({
@@ -35,13 +41,23 @@ export const PinnedCards = memo(function PinnedCards({
 }) {
   const els = useRef(new Map<string, CardEls>())
   const dragged = useRef<string | null>(null)
-  const [dropTarget, setDropTarget] = useState<string | null>(null)
+  const [dragging, setDragging] = useState<string | null>(null)
+  const [dropPreview, setDropPreview] = useState<CardDropPreview | null>(null)
   const [query, setQuery] = useState('')
 
   const clearDrag = () => {
     dragged.current = null
-    setDropTarget(null)
+    setDragging(null)
+    setDropPreview(null)
   }
+
+  const previewCards = useMemo(
+    () =>
+      dropPreview
+        ? previewCardMove(cards, dropPreview.source, dropPreview.target, dropPreview.position)
+        : cards,
+    [cards, dropPreview],
+  )
 
   const pinned = useMemo(() => new Set(cards.map((c) => c.name)), [cards])
 
@@ -204,35 +220,71 @@ export const PinnedCards = memo(function PinnedCards({
         </div>
       </div>
 
-      <div className="grid grid-flow-row-dense grid-cols-[repeat(auto-fill,minmax(9.25rem,1fr))] gap-2">
-        {cards.map(({ name, wide }, index) => {
+      <div
+        className="grid grid-flow-row-dense grid-cols-[repeat(auto-fill,minmax(9.25rem,1fr))] gap-2"
+        onDragLeave={(event) => {
+          const next = event.relatedTarget
+          if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
+            setDropPreview(null)
+          }
+        }}
+      >
+        {previewCards.map(({ name, wide }, index) => {
           const meta = metas[name]
-          const sourceIndex = cards.findIndex((card) => card.name === dragged.current)
-          const dropSide =
-            dropTarget === name && sourceIndex !== -1
-              ? sourceIndex < index
-                ? 'right'
-                : 'left'
-              : null
+          const phantom = dropPreview?.source === name
           const initialColor = ageColor(undefined)
+          if (phantom) {
+            return (
+              <div
+                key={name}
+                data-testid="card-drop-phantom"
+                data-card-name={name}
+                aria-hidden="true"
+                onDragOver={(event) => event.preventDefault()}
+                onDragEnd={clearDrag}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  onCards(previewCards)
+                  clearDrag()
+                }}
+                className={`flex h-[4.25rem] min-w-0 items-center justify-center rounded-lg border-2 border-dashed border-red-400 bg-red-500/10 text-xs font-medium text-red-200 shadow-[inset_0_0_0_1px_rgb(239_68_68_/_0.15)] ${
+                  wide ? 'col-span-2' : 'col-span-1'
+                }`}
+              >
+                Drop {meta?.label || name} here
+              </div>
+            )
+          }
           return (
             <div
               key={name}
+              data-card-name={name}
               draggable={editing}
               onDragStart={(event) => {
                 dragged.current = name
-                setDropTarget(null)
+                setDragging(name)
+                setDropPreview(null)
                 event.dataTransfer.effectAllowed = 'move'
               }}
               onDragOver={(event) => {
                 if (editing && dragged.current && dragged.current !== name) {
                   event.preventDefault()
-                  if (dropTarget !== name) setDropTarget(name)
+                  const bounds = event.currentTarget.getBoundingClientRect()
+                  const position: CardDropPosition =
+                    event.clientX < bounds.left + bounds.width / 2 ? 'before' : 'after'
+                  setDropPreview((current) => {
+                    const next = { source: dragged.current!, target: name, position }
+                    return current?.source === next.source &&
+                      current.target === next.target &&
+                      current.position === next.position
+                      ? current
+                      : next
+                  })
                 }
               }}
               onDrop={(event) => {
                 event.preventDefault()
-                if (dragged.current) onCards(moveCard(cards, dragged.current, name))
+                if (dropPreview?.source === dragged.current) onCards(previewCards)
                 clearDrag()
               }}
               onDragEnd={clearDrag}
@@ -252,13 +304,7 @@ export const PinnedCards = memo(function PinnedCards({
               className={`group relative flex h-[4.25rem] min-w-0 flex-col justify-between rounded-lg border-2 px-3 py-1.5 shadow-sm transition-colors ${
                 wide ? 'col-span-2' : 'col-span-1'
               } ${editing ? 'cursor-grab active:cursor-grabbing' : ''} ${
-                editing && dragged.current === name ? 'opacity-40' : ''
-              } ${
-                dropSide === 'left'
-                  ? 'after:pointer-events-none after:absolute after:top-0 after:-left-1.5 after:h-full after:w-1 after:rounded-full after:bg-red-500'
-                  : dropSide === 'right'
-                    ? 'after:pointer-events-none after:absolute after:top-0 after:-right-1.5 after:h-full after:w-1 after:rounded-full after:bg-red-500'
-                    : ''
+                editing && dragging === name ? 'opacity-40' : ''
               }`}
               style={{ borderColor: initialColor, background: LEVEL_BG.ok }}
               title={name}

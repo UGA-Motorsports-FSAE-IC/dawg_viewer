@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { ChannelMeta } from '../../bindings/dawg_viewer/internal/config/models'
 import { ChannelList, type ListChannel } from '../components/ChannelList'
+import { PlotStack } from '../components/PlotStack'
 import { colorFor, startLive, useChannels, useInfo } from '../live/connection'
 import { LivePlotPanel } from '../live/LivePlotPanel'
 import { PinnedCards } from '../live/PinnedCards'
@@ -8,7 +9,7 @@ import { loadCards, saveCards, type CardItem } from '../live/cardLayout'
 import { StatusHeader } from '../live/StatusHeader'
 import { liveSync, resumeFollow, showWindow, useFollow } from '../live/follow'
 import { layoutReducer, loadPlotLayout, makeLayout, savePlotLayout } from '../state/layout'
-import { plotStack, toolbarButton, toolbarButtonActive } from '../ui'
+import { toolbarButton, toolbarButtonActive } from '../ui'
 
 const initialLayout = makeLayout([
   ['RPM', 'TPS1'],
@@ -164,11 +165,14 @@ export function LiveView() {
               Add plot
             </button>
           </div>
-          <main className={plotStack}>
-            {layout.panels.map((panel, i) => (
+          <PlotStack
+            panels={layout.panels}
+            dispatch={dispatch}
+            renderPanel={(panel, i) => (
               <LivePlotPanel
                 key={panel.id}
                 panel={panel}
+                slotted
                 panels={layout.panels}
                 index={i}
                 active={panel.id === layout.activeId}
@@ -177,8 +181,8 @@ export function LiveView() {
                 sync={liveSync}
                 dispatch={dispatch}
               />
-            ))}
-          </main>
+            )}
+          />
         </div>
       </div>
     </div>

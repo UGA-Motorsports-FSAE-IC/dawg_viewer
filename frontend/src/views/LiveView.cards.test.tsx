@@ -75,23 +75,30 @@ it('searches to add any data point to the top and snaps plots in a bento layout'
   await user.click(screen.getByRole('button', { name: 'Toggle plot 1 height' }))
   expect(screen.getByLabelText('Plot 1').className).toContain('row-span-2')
 
-  // Drag Plot 2 onto Plot 1 to snap them side-by-side in the bento grid
+  // Drag Plot 2 into the open right slot of the third row.
+  vi.spyOn(screen.getByRole('main'), 'getBoundingClientRect').mockReturnValue({
+    left: 0, top: 0, width: 1000, height: 600,
+  } as DOMRect)
   fireEvent.dragStart(plot2, { dataTransfer: { effectAllowed: '' } })
-  fireEvent.dragOver(screen.getByLabelText('Plot 1'))
-  expect(screen.getByLabelText('Plot 1')).toHaveAttribute('data-snap', 'left')
-  fireEvent.drop(screen.getByLabelText('Plot 1'))
+  const dragOver = new Event('dragover', { bubbles: true, cancelable: true })
+  Object.defineProperties(dragOver, { clientX: { value: 750 }, clientY: { value: 430 } })
+  fireEvent(screen.getByRole('main'), dragOver)
+  expect(screen.getByTestId('plot-phantom')).toBeInTheDocument()
+  expect(screen.getByTestId('plot-phantom')).toContainElement(plot2)
+  fireEvent.drop(screen.getByRole('main'))
 
-  // Both plots snap to 1-col side-by-side and swap order
-  expect(screen.getByLabelText('Plot 1').className).toContain('col-span-1')
+  // The original plot sizes remain after the drop
+  expect(screen.getByLabelText('Plot 1').className).toContain('col-span-2')
   expect(screen.getByLabelText('Plot 2').className).toContain('col-span-1')
-  expect(screen.getByLabelText('Plot 1')).toHaveTextContent('CLT1')
-  expect(screen.getByLabelText('Plot 2')).toHaveTextContent('RPM')
+  expect(screen.getByLabelText('Plot 1')).toHaveTextContent('RPM')
+  expect(screen.getByLabelText('Plot 2')).toHaveTextContent('CLT1')
 
   // Drag right edge of Plot 1 to dynamically resize width, and bottom edge of Plot 2 to dynamically resize height
+  await user.click(screen.getByRole('button', { name: 'Toggle plot 1 width' }))
   const rightEdge = screen.getByLabelText('Drag right edge of plot 1')
   fireEvent.pointerDown(rightEdge, { clientX: 100, clientY: 100 })
   fireEvent.pointerMove(document, { clientX: 120, clientY: 100 })
-  expect(screen.getByLabelText('Plot 1').style.width).toBe('calc(62.5% - 0.25rem)')
+  expect(screen.getByLabelText('Plot 1').style.width).toBe('100%')
   fireEvent.pointerMove(document, { clientX: 180, clientY: 100 })
   fireEvent.pointerUp(document)
   expect(screen.getByLabelText('Plot 1').className).toContain('col-span-2')
@@ -99,8 +106,8 @@ it('searches to add any data point to the top and snaps plots in a bento layout'
   const bottomEdge = screen.getByLabelText('Drag bottom edge of plot 2')
   fireEvent.pointerDown(bottomEdge, { clientX: 100, clientY: 100 })
   fireEvent.pointerMove(document, { clientX: 100, clientY: 135 })
-  expect(screen.getByLabelText('Plot 2').style.height).toBe('419px')
+  expect(screen.getByLabelText('Plot 2').style.height).toBe('227px')
   fireEvent.pointerMove(document, { clientX: 100, clientY: 450 })
   fireEvent.pointerUp(document)
-  expect(screen.getByLabelText('Plot 2').className).toContain('row-span-4')
+  expect(screen.getByLabelText('Plot 2').className).toContain('row-span-3')
 })

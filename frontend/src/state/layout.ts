@@ -1,4 +1,5 @@
 export type BentoSpan = 1 | 2
+import { assignPlotSlots, placePanel } from './plotSlots'
 export type BentoRowSpan = 1 | 2 | 3 | 4
 export type SnapZone = 'left' | 'right' | 'top' | 'bottom'
 
@@ -7,6 +8,7 @@ export const DEFAULT_ROW_HEIGHT = 192
 export interface Panel {
   id: number
   channelIds: string[]
+  slot?: { row: number; col: 0 | 1 }
   colSpan?: BentoSpan
   rowSpan?: BentoRowSpan
   widthPct?: number
@@ -26,6 +28,8 @@ export type LayoutAction =
   | { type: 'removePanel'; panelId: number }
   | { type: 'setActive'; panelId: number }
   | { type: 'movePanel'; fromId: number; toId: number; snap?: SnapZone }
+  | { type: 'movePanelToIndex'; panelId: number; index: number }
+  | { type: 'placePanel'; panelId: number; row: number; col: 0 | 1 }
   | { type: 'togglePanelWidth'; panelId: number }
   | { type: 'togglePanelHeight'; panelId: number }
   | {
@@ -56,7 +60,7 @@ export function clearPlotDrag() {
 
 export function makeLayout(panels: string[][]): Layout {
   return {
-    panels: panels.map((channelIds, i) => ({ id: i + 1, channelIds })),
+    panels: assignPlotSlots(panels.map((channelIds, i) => ({ id: i + 1, channelIds }))),
     activeId: 1,
     nextId: panels.length + 1,
   }
@@ -196,6 +200,21 @@ export function movePanels(
   return next
 }
 
+export function movePanelToIndex(panels: Panel[], panelId: number, index: number): Panel[] {
+  const source = panels.findIndex((panel) => panel.id === panelId)
+  if (
+    source < 0 ||
+    !Number.isInteger(index) ||
+    index < 0 ||
+    index >= panels.length ||
+    source === index
+  )
+    return panels
+  const next = [...panels]
+  next.splice(index, 0, ...next.splice(source, 1))
+  return next
+}
+
 export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
   switch (action.type) {
     case 'toggleChannel':
@@ -210,13 +229,14 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
       )
     case 'addPanel':
       return {
-        panels: [...layout.panels, { id: layout.nextId, channelIds: [] }],
+        panels: assignPlotSlots([...layout.panels, { id: layout.nextId, channelIds: [] }]),
         activeId: layout.nextId,
         nextId: layout.nextId + 1,
       }
     case 'removePanel': {
       if (layout.panels.length === 1) return updatePanel(layout, action.panelId, () => [])
-      const panels = layout.panels.filter((p) => p.id !== action.panelId)
+      const remaining = layout.panels.filter((p) => p.id !== action.panelId)
+      const panels = assignPlotSlots(remaining.length === 1 ? [{ ...remaining[0], slot: undefined }] : remaining)
       const activeId = layout.activeId === action.panelId ? panels[0].id : layout.activeId
       return { ...layout, panels, activeId }
     }
@@ -226,10 +246,18 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
       const panels = movePanels(layout.panels, action.fromId, action.toId, action.snap)
       return panels === layout.panels ? layout : { ...layout, panels }
     }
+    case 'movePanelToIndex': {
+      const panels = movePanelToIndex(layout.panels, action.panelId, action.index)
+      return panels === layout.panels ? layout : { ...layout, panels }
+    }
+    case 'placePanel': {
+      const panels = placePanel(layout.panels, action.panelId, action.row, action.col)
+      return panels === layout.panels ? layout : { ...layout, panels }
+    }
     case 'togglePanelWidth':
       return {
         ...layout,
-        panels: layout.panels.map((p) => {
+        panels: assignPlotSlots(layout.panels.map((p) => {
           if (p.id !== action.panelId) return p
           const nextSpan: BentoSpan = (p.colSpan ?? 1) === 2 ? 1 : 2
           return {
@@ -237,12 +265,12 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
             colSpan: nextSpan,
             widthPct: nextSpan === 2 ? 100 : 50,
           }
-        }),
+        })),
       }
     case 'togglePanelHeight':
       return {
         ...layout,
-        panels: layout.panels.map((p) => {
+        panels: assignPlotSlots(layout.panels.map((p) => {
           if (p.id !== action.panelId) return p
           const nextRow: BentoRowSpan = (p.rowSpan ?? 1) >= 2 ? 1 : 2
           return {
@@ -250,12 +278,12 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
             rowSpan: nextRow,
             height: nextRow * DEFAULT_ROW_HEIGHT,
           }
-        }),
+        })),
       }
     case 'resizePanel':
       return {
         ...layout,
-        panels: layout.panels.map((p) =>
+        panels: assignPlotSlots(layout.panels.map((p) =>
           p.id === action.panelId
             ? {
                 ...p,
@@ -265,7 +293,7 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
                 height: action.height ?? p.height,
               }
             : p,
-        ),
+        )),
       }
     case 'setLayout':
       return action.layout
@@ -303,6 +331,12 @@ export function loadPlotLayout(profile: string, fallback: Layout): Layout {
         return fallback
       ids.add(p.id)
       const panel: Panel = { id: p.id, channelIds: p.channelIds as string[] }
+      if (p.slot !== undefined) {
+        if (!p.slot || typeof p.slot !== 'object' || Array.isArray(p.slot)) return fallback
+        const slot = p.slot as Record<string, unknown>
+        if (!Number.isInteger(slot.row) || (slot.row as number) < 0 || (slot.col !== 0 && slot.col !== 1)) return fallback
+        panel.slot = { row: slot.row as number, col: slot.col as 0 | 1 }
+      }
       if (p.colSpan) panel.colSpan = p.colSpan
       if (p.rowSpan) panel.rowSpan = p.rowSpan
       if (typeof p.widthPct === 'number' && p.widthPct >= 20 && p.widthPct <= 100) {
@@ -317,7 +351,7 @@ export function loadPlotLayout(profile: string, fallback: Layout): Layout {
     const activeId =
       typeof raw.activeId === 'number' && ids.has(raw.activeId) ? raw.activeId : panels[0].id
     const nextId = typeof raw.nextId === 'number' && raw.nextId > maxId ? raw.nextId : maxId + 1
-    return { panels, activeId, nextId }
+    return { panels: assignPlotSlots(panels), activeId, nextId }
   } catch {
     return fallback
   }
