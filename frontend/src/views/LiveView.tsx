@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useReducer } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { ChannelMeta } from '../../bindings/dawg_viewer/internal/config/models'
 import { ChannelList, type ListChannel } from '../components/ChannelList'
 import { colorFor, startLive, useChannels, useInfo } from '../live/connection'
 import { LivePlotPanel } from '../live/LivePlotPanel'
 import { PinnedCards } from '../live/PinnedCards'
+import { loadCards, saveCards, type CardItem } from '../live/cardLayout'
 import { StatusHeader } from '../live/StatusHeader'
 import { liveSync, resumeFollow, showWindow, useFollow } from '../live/follow'
 import { layoutReducer, makeLayout } from '../state/layout'
@@ -31,6 +32,44 @@ export function LiveView() {
   const info = useInfo()
   const channels = useChannels()
   const metas = info?.channels ?? NO_METAS
+  const profile = info?.active ?? ''
+  const [cardState, setCardState] = useState<{ profile: string; cards: CardItem[] }>(() => ({
+    profile,
+    cards: loadCards(profile, metas),
+  }))
+  const cards = cardState.profile === profile ? cardState.cards : loadCards(profile, metas)
+  const [editingCards, setEditingCards] = useState(false)
+  const cardsRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLElement>(null)
+  if (cardState.profile !== profile) {
+    setCardState({ profile, cards: loadCards(profile, metas) })
+    setEditingCards(false)
+  }
+  useEffect(() => {
+    if (!editingCards) return
+    const finish = (event: PointerEvent) => {
+      if (
+        cardsRef.current?.contains(event.target as Node) ||
+        listRef.current?.contains(event.target as Node)
+      )
+        return
+      saveCards(profile, cards)
+      setEditingCards(false)
+    }
+    document.addEventListener('pointerdown', finish)
+    const finishKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' || (event.key === 'Enter' && event.target === cardsRef.current)) {
+        saveCards(profile, cards)
+        setEditingCards(false)
+      }
+    }
+    document.addEventListener('keydown', finishKey)
+    return () => {
+      document.removeEventListener('pointerdown', finish)
+      document.removeEventListener('keydown', finishKey)
+    }
+  }, [editingCards, cards, profile])
+  const updateCards = (next: CardItem[]) => setCardState({ profile, cards: next })
   const [layout, dispatch] = useReducer(layoutReducer, initialLayout)
   const activePanel = layout.panels.find((p) => p.id === layout.activeId)
 
@@ -54,12 +93,25 @@ export function LiveView() {
       <StatusHeader />
       <div className="flex min-h-0 flex-1">
         <ChannelList
+          listRef={listRef}
+          cardEditMode={editingCards}
+          onSelectCard={(name) => {
+            if (!cards.some((card) => card.name === name))
+              updateCards([...cards, { name, wide: false }])
+          }}
           channels={listChannels}
           selectedIds={activePanel?.channelIds ?? NO_CHANNELS}
           dispatch={dispatch}
         />
         <div className="flex min-w-0 flex-1 flex-col">
-          <PinnedCards metas={metas} />
+          <PinnedCards
+            cardRef={cardsRef}
+            metas={metas}
+            cards={cards}
+            editing={editingCards}
+            onEdit={() => setEditingCards(true)}
+            onCards={updateCards}
+          />
           <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-zinc-800 px-3 py-1.5">
             {WINDOWS.map(([s, label]) => (
               <button
