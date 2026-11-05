@@ -3,6 +3,7 @@ import type { Session } from '../data/session'
 import { mountPlot } from '../plot/mountPlot'
 import { Histogram } from '../plot/HistogramGraph'
 import { GraphBody } from './GraphBody'
+import { streamColor, useStreamColors } from '../data/streamColors'
 import type { ViewSync } from '../plot/sync'
 import {
   DEFAULT_ROW_HEIGHT,
@@ -42,6 +43,7 @@ export const PlotPanel = memo(function PlotPanel({
   sync,
   dispatch,
 }: Props) {
+  useStreamColors()
   const sectionRef = useRef<HTMLElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const valueEls = useRef(new Map<string, HTMLSpanElement>())
@@ -64,12 +66,13 @@ export const PlotPanel = memo(function PlotPanel({
     [channels, session],
   )
 
+  const colorsKey = panel.channelIds.map(streamColor).join(',')
   useEffect(() => {
     const host = hostRef.current
     if (!host || channels.length === 0 || panel.graph?.type === 'histogram') return
     const { time } = session
     const plot = mountPlot(host, {
-      series: channels,
+      series: channels.map((ch) => ({ ...ch, color: streamColor(ch.id) })),
       data: [time, ...channels.map((ch) => ch.data)],
       sync,
       bounds: () => [time[0], time[time.length - 1]],
@@ -82,7 +85,7 @@ export const PlotPanel = memo(function PlotPanel({
       },
     })
     return plot.destroy
-  }, [channels, session, sync, panel.graph?.type])
+  }, [channels, session, sync, panel.graph?.type, colorsKey])
 
   const startEdgeResize = (edge: ResizeEdge) => (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -169,7 +172,7 @@ export const PlotPanel = memo(function PlotPanel({
         <ul className="flex min-w-0 flex-1 flex-wrap gap-x-4 gap-y-1">
           {channels.map((ch) => (
             <li key={ch.id} className="group flex items-center gap-1.5">
-              <span className="size-2 rounded-full" style={{ background: ch.color }} />
+              <span className="size-2 rounded-full" style={{ background: streamColor(ch.id) }} />
               <span className="text-zinc-300">{ch.name}</span>
               <span
                 ref={(el) => {
@@ -274,7 +277,11 @@ export const PlotPanel = memo(function PlotPanel({
               bins={panel.graph.bins}
               name={channels[0].name}
               unit={channels[0].unit}
-              color={channels[0].color}
+              color={streamColor(channels[0].id)}
+              valueRange={panel.graph.valueRange}
+              orientation={panel.graph.orientation}
+              frequency={panel.graph.frequency}
+              frequencyMax={panel.graph.frequencyMax}
             />
           ) : (
             <div ref={hostRef} className="absolute inset-0" />

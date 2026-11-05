@@ -3,6 +3,7 @@ import type { Channel } from '../data/session'
 
 export type ListChannel = Pick<Channel, 'id' | 'name' | 'group' | 'unit' | 'color'>
 import type { LayoutAction } from '../state/layout'
+import { streamColor, useStreamColors } from '../data/streamColors'
 
 interface Props {
   channels: ListChannel[]
@@ -21,6 +22,7 @@ export const ChannelList = memo(function ChannelList({
   cardEditMode,
   listRef,
 }: Props) {
+  useStreamColors()
   const [query, setQuery] = useState('')
 
   const groups = useMemo(() => {
@@ -88,7 +90,10 @@ export const ChannelList = memo(function ChannelList({
                 >
                   <span
                     className="size-2.5 shrink-0 rounded-sm border"
-                    style={{ borderColor: ch.color, background: on ? ch.color : 'transparent' }}
+                    style={{
+                      borderColor: streamColor(ch.id),
+                      background: on ? streamColor(ch.id) : 'transparent',
+                    }}
                   />
                   <span className="min-w-0 flex-1 truncate">{ch.name}</span>
                   <span className="shrink-0 text-xs text-zinc-600">{ch.unit}</span>

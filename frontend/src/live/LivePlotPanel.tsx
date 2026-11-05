@@ -4,6 +4,7 @@ import type { ChannelMeta } from '../../bindings/dawg_viewer/internal/config/mod
 import { mountPlot } from '../plot/mountPlot'
 import { Histogram } from '../plot/HistogramGraph'
 import { GraphBody } from '../components/GraphBody'
+import { useStreamColors } from '../data/streamColors'
 import type { ViewSync } from '../plot/sync'
 import {
   DEFAULT_ROW_HEIGHT,
@@ -65,6 +66,7 @@ export const LivePlotPanel = memo(function LivePlotPanel({
   sync,
   dispatch,
 }: Props) {
+  useStreamColors()
   const sectionRef = useRef<HTMLElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const valueEls = useRef(new Map<string, HTMLSpanElement>())
@@ -82,6 +84,7 @@ export const LivePlotPanel = memo(function LivePlotPanel({
   const names = useMemo(() => (namesKey ? namesKey.split('\n') : []), [namesKey])
   const waiting = panel.channelIds.filter((n) => !known.has(n))
 
+  const colorsKey = names.map(colorFor).join(',')
   useEffect(() => {
     const host = hostRef.current
     if (!host || names.length === 0 || panel.graph?.type === 'histogram') return
@@ -119,7 +122,7 @@ export const LivePlotPanel = memo(function LivePlotPanel({
       off()
       plot.destroy()
     }
-  }, [names, metas, sync, panel.graph?.type])
+  }, [names, metas, sync, panel.graph?.type, colorsKey])
 
   const startEdgeResize = (edge: ResizeEdge) => (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -314,6 +317,10 @@ export const LivePlotPanel = memo(function LivePlotPanel({
               name={metas[names[0]]?.label || names[0]}
               unit={metas[names[0]]?.unit || ''}
               color={colorFor(names[0])}
+              valueRange={panel.graph.valueRange}
+              orientation={panel.graph.orientation}
+              frequency={panel.graph.frequency}
+              frequencyMax={panel.graph.frequencyMax}
             />
           ) : (
             <div ref={hostRef} className="absolute inset-0" />

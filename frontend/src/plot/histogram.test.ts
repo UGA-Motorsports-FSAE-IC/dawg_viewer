@@ -20,3 +20,17 @@ it('handles empty and constant values', () => {
     buildHistogram(new Float64Array([0, 1]), new Float64Array([7, 7]), null, 30).counts,
   ).toEqual([2])
 })
+
+it('excludes samples outside a custom value range and reports percentages', () => {
+  const result = buildHistogram(
+    new Float64Array([0, 1, 2, 3]),
+    new Float64Array([-1, 0, 1, 2]),
+    null,
+    5,
+    { min: 0, max: 1 },
+    'percent',
+  )
+  expect(result.outside).toBe(2)
+  expect(result.total).toBe(2)
+  expect(result.counts.reduce((sum, n) => sum + n, 0)).toBe(100)
+})

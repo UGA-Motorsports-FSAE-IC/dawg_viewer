@@ -5,7 +5,16 @@ export type SnapZone = 'left' | 'right' | 'top' | 'bottom'
 
 export const DEFAULT_ROW_HEIGHT = 192
 export type GraphType = 'timeSeries' | 'histogram'
-export type GraphConfig = { type: 'timeSeries' } | { type: 'histogram'; bins: number }
+export type GraphConfig =
+  | { type: 'timeSeries' }
+  | {
+      type: 'histogram'
+      bins: number
+      valueRange?: { min: number; max: number } | null
+      orientation?: 'vertical' | 'horizontal'
+      frequency?: 'count' | 'percent'
+      frequencyMax?: number | null
+    }
 
 export interface Panel {
   id: number
@@ -32,6 +41,11 @@ export type LayoutAction =
   | { type: 'setActive'; panelId: number }
   | { type: 'setGraphType'; panelId: number; graphType: GraphType }
   | { type: 'setHistogramBins'; panelId: number; bins: number }
+  | {
+      type: 'updateHistogram'
+      panelId: number
+      changes: Partial<Extract<GraphConfig, { type: 'histogram' }>>
+    }
   | { type: 'movePanel'; fromId: number; toId: number; snap?: SnapZone }
   | { type: 'movePanelToIndex'; panelId: number; index: number }
   | { type: 'placePanel'; panelId: number; row: number; col: 0 | 1 }
@@ -240,7 +254,14 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
             ? {
                 ...p,
                 channelIds: p.channelIds.slice(0, 1),
-                graph: { type: 'histogram' as const, bins: 30 },
+                graph: {
+                  type: 'histogram' as const,
+                  bins: 30,
+                  valueRange: null,
+                  orientation: 'vertical' as const,
+                  frequency: 'count' as const,
+                  frequencyMax: null,
+                },
               }
             : { ...p, graph: { type: 'timeSeries' as const } }
         }),
@@ -254,6 +275,35 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
             ? { ...p, graph: { type: 'histogram', bins: action.bins } }
             : p,
         ),
+      }
+    case 'updateHistogram':
+      return {
+        ...layout,
+        panels: layout.panels.map((p) => {
+          if (p.id !== action.panelId || p.graph?.type !== 'histogram') return p
+          const next = { ...p.graph, ...action.changes }
+          if (!Number.isInteger(next.bins) || next.bins < 5 || next.bins > 200) return p
+          if (
+            next.valueRange &&
+            (!Number.isFinite(next.valueRange.min) ||
+              !Number.isFinite(next.valueRange.max) ||
+              next.valueRange.min >= next.valueRange.max)
+          )
+            return p
+          if (
+            next.frequencyMax != null &&
+            (!Number.isFinite(next.frequencyMax) || next.frequencyMax <= 0)
+          )
+            return p
+          if (
+            next.orientation &&
+            next.orientation !== 'vertical' &&
+            next.orientation !== 'horizontal'
+          )
+            return p
+          if (next.frequency && next.frequency !== 'count' && next.frequency !== 'percent') return p
+          return { ...p, graph: next }
+        }),
       }
     case 'removeChannel':
       return updatePanel(layout, action.panelId, (ids) =>
@@ -382,6 +432,22 @@ export function loadPlotLayout(profile: string, fallback: Layout): Layout {
               (graph.bins as number) <= 200
                 ? (graph.bins as number)
                 : 30,
+            valueRange:
+              graph.valueRange &&
+              typeof graph.valueRange === 'object' &&
+              Number.isFinite((graph.valueRange as { min: number }).min) &&
+              Number.isFinite((graph.valueRange as { max: number }).max) &&
+              (graph.valueRange as { min: number }).min < (graph.valueRange as { max: number }).max
+                ? (graph.valueRange as { min: number; max: number })
+                : null,
+            orientation: graph.orientation === 'horizontal' ? 'horizontal' : 'vertical',
+            frequency: graph.frequency === 'percent' ? 'percent' : 'count',
+            frequencyMax:
+              typeof graph.frequencyMax === 'number' &&
+              Number.isFinite(graph.frequencyMax) &&
+              graph.frequencyMax > 0
+                ? graph.frequencyMax
+                : null,
           }
           panel.channelIds = panel.channelIds.slice(0, 1)
         } else if (graph.type === 'timeSeries') panel.graph = { type: 'timeSeries' }

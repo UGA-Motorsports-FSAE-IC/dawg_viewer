@@ -10,6 +10,10 @@ export function Histogram({
   name,
   unit,
   color,
+  valueRange = null,
+  orientation = 'vertical',
+  frequency = 'count',
+  frequencyMax = null,
 }: {
   source: {
     data: () => { time: Float64Array; values: Float64Array }
@@ -20,6 +24,10 @@ export function Histogram({
   name: string
   unit: string
   color: string
+  valueRange?: { min: number; max: number } | null
+  orientation?: 'vertical' | 'horizontal'
+  frequency?: 'count' | 'percent'
+  frequencyMax?: number | null
 }) {
   const host = useRef<HTMLDivElement>(null)
   const info = useRef<HTMLSpanElement>(null)
@@ -29,7 +37,7 @@ export function Histogram({
     let range: Range | null = sync.range()
     const calculate = () => {
       const { time, values } = source.data()
-      return buildHistogram(time, values, range, bins)
+      return buildHistogram(time, values, range, bins, valueRange, frequency)
     }
     const initial = calculate()
     let current = initial
@@ -38,7 +46,13 @@ export function Histogram({
         width: el.clientWidth || 300,
         height: el.clientHeight || 150,
         legend: { show: false },
-        scales: { x: { time: false }, y: { range: (u, min, max) => [0, Math.max(1, max ?? 0)] } },
+        scales: {
+          x: { time: false, ori: orientation === 'horizontal' ? 1 : 0 },
+          y: {
+            ori: orientation === 'horizontal' ? 0 : 1,
+            range: (u, min, max) => [0, frequencyMax ?? Math.max(1, max ?? 0)],
+          },
+        },
         series: [
           {},
           {
@@ -49,8 +63,12 @@ export function Histogram({
           },
         ],
         axes: [
-          { label: unit || name, stroke: '#a1a1aa' },
-          { label: 'Samples', stroke: '#a1a1aa' },
+          { label: unit || name, stroke: '#a1a1aa', side: orientation === 'horizontal' ? 3 : 2 },
+          {
+            label: frequency === 'percent' ? 'Percent' : 'Samples',
+            stroke: '#a1a1aa',
+            side: orientation === 'horizontal' ? 2 : 3,
+          },
         ],
         hooks: {
           setCursor: [
@@ -98,7 +116,7 @@ export function Histogram({
       resize.disconnect()
       plot.destroy()
     }
-  }, [source, sync, bins, name, unit, color])
+  }, [source, sync, bins, name, unit, color, valueRange, orientation, frequency, frequencyMax])
   return (
     <>
       <div ref={host} className="absolute inset-0" />

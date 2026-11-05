@@ -18,7 +18,7 @@ describe('layoutReducer', () => {
     let layout = makeLayout([['RPM', 'TPS1', 'VSS']])
     layout = layoutReducer(layout, { type: 'setGraphType', panelId: 1, graphType: 'histogram' })
     expect(layout.panels[0].channelIds).toEqual(['RPM'])
-    expect(layout.panels[0].graph).toEqual({ type: 'histogram', bins: 30 })
+    expect(layout.panels[0].graph).toMatchObject({ type: 'histogram', bins: 30 })
     layout = layoutReducer(layout, { type: 'toggleChannel', channelId: 'CLT1' })
     expect(layout.panels[0].channelIds).toEqual(['CLT1'])
     layout = layoutReducer(layout, { type: 'setGraphType', panelId: 1, graphType: 'timeSeries' })

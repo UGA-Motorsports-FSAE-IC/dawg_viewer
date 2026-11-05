@@ -120,6 +120,11 @@ time range and redraw as live data or the range changes. The bin count is
 configurable in the same menu. Live counts use the store's forward-filled
 rows, so they count displayed samples rather than raw channel updates.
 
+The plot settings popover also lists every selected stream with a global color
+override. Color changes are stored under `dawg.stream-colors.v1` and update
+both Live and Viewer plots. Histograms can use a custom value range, horizontal
+orientation, percentages, and a manual frequency-axis maximum.
+
 ## Tabs (App.tsx)
 
 Views stay mounted and are hidden with CSS, so live data and plot layouts

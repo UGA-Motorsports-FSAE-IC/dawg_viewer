@@ -1,5 +1,6 @@
 import { LogService } from '../../bindings/dawg_viewer/services'
-import { CHANNEL_COLORS, type Channel, type Session } from '../data/session'
+import { type Channel, type Session } from '../data/session'
+import { streamColor } from '../data/streamColors'
 import { info } from '../live/connection'
 
 export async function openLog(path: string): Promise<Session> {
@@ -22,7 +23,7 @@ export async function openLog(path: string): Promise<Session> {
     name: c.name,
     group: 'Log',
     unit: c.unit || metas[c.name]?.unit || '',
-    color: CHANNEL_COLORS[i % CHANNEL_COLORS.length],
+    color: streamColor(c.name),
     precision: metas[c.name]?.precision ?? 2,
     data: new Float64Array(buf, (i + 1) * rows * 8, rows),
   }))
