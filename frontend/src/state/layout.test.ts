@@ -14,6 +14,29 @@ import { previewPlotPlacement, validPlacement } from './plotSlots'
 beforeEach(() => localStorage.clear())
 
 describe('layoutReducer', () => {
+  it('converts a multi-channel plot to a histogram of its first series', () => {
+    let layout = makeLayout([['RPM', 'TPS1', 'VSS']])
+    layout = layoutReducer(layout, { type: 'setGraphType', panelId: 1, graphType: 'histogram' })
+    expect(layout.panels[0].channelIds).toEqual(['RPM'])
+    expect(layout.panels[0].graph).toEqual({ type: 'histogram', bins: 30 })
+    layout = layoutReducer(layout, { type: 'toggleChannel', channelId: 'CLT1' })
+    expect(layout.panels[0].channelIds).toEqual(['CLT1'])
+    layout = layoutReducer(layout, { type: 'setGraphType', panelId: 1, graphType: 'timeSeries' })
+    expect(layout.panels[0].channelIds).toEqual(['CLT1'])
+  })
+
+  it('loads legacy layouts and validates histogram settings', () => {
+    const layout = makeLayout([['RPM', 'TPS1']])
+    savePlotLayout('legacy', layout)
+    expect(loadPlotLayout('legacy', makeLayout([[]])).panels[0].graph).toBeUndefined()
+    const histogram = layoutReducer(layout, {
+      type: 'setGraphType',
+      panelId: 1,
+      graphType: 'histogram',
+    })
+    savePlotLayout('histogram', histogram)
+    expect(loadPlotLayout('histogram', makeLayout([[]])).panels[0]).toEqual(histogram.panels[0])
+  })
   it('keeps channel selection in the active panel', () => {
     let layout = makeLayout([['RPM'], ['TPS1']])
     layout = layoutReducer(layout, { type: 'setActive', panelId: 2 })
@@ -66,15 +89,21 @@ describe('layoutReducer', () => {
   it('swaps occupied slots and moves into empty space without shifting other plots', () => {
     let layout = makeLayout([['RPM'], ['TPS1'], ['CLT1']])
     expect(layout.panels.map((panel) => panel.slot)).toEqual([
-      { row: 0, col: 0 }, { row: 0, col: 1 }, { row: 1, col: 0 },
+      { row: 0, col: 0 },
+      { row: 0, col: 1 },
+      { row: 1, col: 0 },
     ])
     layout = layoutReducer(layout, { type: 'placePanel', panelId: 1, row: 0, col: 1 })
     expect(layout.panels.map((panel) => panel.slot)).toEqual([
-      { row: 0, col: 1 }, { row: 0, col: 0 }, { row: 1, col: 0 },
+      { row: 0, col: 1 },
+      { row: 0, col: 0 },
+      { row: 1, col: 0 },
     ])
     layout = layoutReducer(layout, { type: 'placePanel', panelId: 1, row: 3, col: 1 })
     expect(layout.panels.map((panel) => panel.slot)).toEqual([
-      { row: 3, col: 1 }, { row: 0, col: 0 }, { row: 1, col: 0 },
+      { row: 3, col: 1 },
+      { row: 0, col: 0 },
+      { row: 1, col: 0 },
     ])
     expect(validPlacement(layout.panels)).toBe(true)
   })
@@ -90,11 +119,17 @@ describe('layoutReducer', () => {
       nextId: 4,
     }
     const expected = [
-      { row: 0, col: 1 }, { row: 0, col: 0 }, { row: 1, col: 0 },
+      { row: 0, col: 1 },
+      { row: 0, col: 0 },
+      { row: 1, col: 0 },
     ]
     // Hovering either short plot previews the same two-row replacement.
-    expect(previewPlotPlacement(start.panels, 1, { row: 0, col: 1 })?.map((p) => p.slot)).toEqual(expected)
-    expect(previewPlotPlacement(start.panels, 1, { row: 1, col: 1 })?.map((p) => p.slot)).toEqual(expected)
+    expect(previewPlotPlacement(start.panels, 1, { row: 0, col: 1 })?.map((p) => p.slot)).toEqual(
+      expected,
+    )
+    expect(previewPlotPlacement(start.panels, 1, { row: 1, col: 1 })?.map((p) => p.slot)).toEqual(
+      expected,
+    )
     const layout = layoutReducer(start, { type: 'placePanel', panelId: 1, row: 1, col: 1 })
     expect(layout.panels.map((panel) => panel.slot)).toEqual(expected)
     expect(validPlacement(layout.panels)).toBe(true)

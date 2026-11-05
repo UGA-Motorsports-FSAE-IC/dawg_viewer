@@ -2,6 +2,8 @@ import { memo, useEffect, useMemo, useRef, useState, type Dispatch } from 'react
 import type uPlot from 'uplot'
 import type { ChannelMeta } from '../../bindings/dawg_viewer/internal/config/models'
 import { mountPlot } from '../plot/mountPlot'
+import { Histogram } from '../plot/HistogramGraph'
+import { GraphBody } from '../components/GraphBody'
 import type { ViewSync } from '../plot/sync'
 import {
   DEFAULT_ROW_HEIGHT,
@@ -36,6 +38,22 @@ function plotData(names: string[]): uPlot.AlignedData {
   return [store.times(), ...names.map((n) => store.column(n) ?? new Float64Array(store.length))]
 }
 
+const histogramSources = new Map<
+  string,
+  { data: () => { time: Float64Array; values: Float64Array }; subscribe: typeof store.subscribe }
+>()
+function liveHistogramSource(name: string) {
+  let source = histogramSources.get(name)
+  if (!source) {
+    source = {
+      data: () => ({ time: store.times(), values: store.column(name) ?? new Float64Array(0) }),
+      subscribe: (fn) => store.subscribe(fn),
+    }
+    histogramSources.set(name, source)
+  }
+  return source
+}
+
 export const LivePlotPanel = memo(function LivePlotPanel({
   panel,
   panels,
@@ -66,7 +84,7 @@ export const LivePlotPanel = memo(function LivePlotPanel({
 
   useEffect(() => {
     const host = hostRef.current
-    if (!host || names.length === 0) return
+    if (!host || names.length === 0 || panel.graph?.type === 'histogram') return
 
     let cursorIdx: number | null = null
     const showValues = () => {
@@ -101,7 +119,7 @@ export const LivePlotPanel = memo(function LivePlotPanel({
       off()
       plot.destroy()
     }
-  }, [names, metas, sync])
+  }, [names, metas, sync, panel.graph?.type])
 
   const startEdgeResize = (edge: ResizeEdge) => (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -113,7 +131,11 @@ export const LivePlotPanel = memo(function LivePlotPanel({
     const startWidthPct = widthPct
     const rect = sectionRef.current?.getBoundingClientRect()
     const startHeightPx = rect && rect.height > 0 ? rect.height : heightPx
-    const containerWidthPx = (slotted ? sectionRef.current?.parentElement?.parentElement : sectionRef.current?.parentElement)?.clientWidth ?? 0
+    const containerWidthPx =
+      (slotted
+        ? sectionRef.current?.parentElement?.parentElement
+        : sectionRef.current?.parentElement
+      )?.clientWidth ?? 0
 
     setActiveEdge(edge)
 
@@ -271,21 +293,33 @@ export const LivePlotPanel = memo(function LivePlotPanel({
         </div>
       </header>
 
-      <div
-        draggable
-        onDragStart={blockDrag}
-        className="relative min-h-0 min-w-0 flex-1 overflow-hidden"
-      >
-        {names.length === 0 ? (
-          <p className="absolute inset-0 grid place-items-center text-sm text-zinc-600">
-            {waiting.length > 0
-              ? `Waiting for ${waiting.join(', ')} from the device`
-              : 'Pick channels from the list to plot them here'}
-          </p>
-        ) : (
-          <div ref={hostRef} className="absolute inset-0" />
-        )}
-      </div>
+      <GraphBody panel={panel} dispatch={dispatch}>
+        <div
+          draggable
+          onDragStart={blockDrag}
+          className="relative h-full min-h-0 min-w-0 overflow-hidden"
+        >
+          {names.length === 0 ? (
+            <p className="absolute inset-0 grid place-items-center text-sm text-zinc-600">
+              {waiting.length > 0
+                ? `Waiting for ${waiting.join(', ')} from the device`
+                : 'Pick channels from the list to plot them here'}
+            </p>
+          ) : panel.graph?.type === 'histogram' ? (
+            <Histogram
+              key={names[0]}
+              source={liveHistogramSource(names[0])}
+              sync={sync}
+              bins={panel.graph.bins}
+              name={metas[names[0]]?.label || names[0]}
+              unit={metas[names[0]]?.unit || ''}
+              color={colorFor(names[0])}
+            />
+          ) : (
+            <div ref={hostRef} className="absolute inset-0" />
+          )}
+        </div>
+      </GraphBody>
 
       {/* Left edge drag handle */}
       <div

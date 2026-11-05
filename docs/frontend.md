@@ -8,8 +8,8 @@ src/live/          live view: connection, store, follow mode, cards, plots, stat
 src/views/         LiveView, LogsView, ViewerView
 src/viewer/        turning a loaded log into a viewer session
 src/plot/          uPlot wrapper and shared plot view state
-src/components/    channel list and viewer plot panel
-src/state/         plot layout reducer
+src/components/    channel list, plot stack and viewer plot panel
+src/state/         plot layout reducer and bento slot placement
 src/data/          viewer session type and shared colours
 ```
 
@@ -98,9 +98,27 @@ widget (`ageColor` in `live/format.ts`).
 
 ## Layout (state/layout.ts)
 
-A reducer for the list of plot panels and which one is active. Untouched
-panels keep their object identity so memoised plots don't rebuild. Removing
-the last panel empties it instead, so there's always one.
+A reducer for the list of plot panels and which one is active. Panels have
+saved grid slots as well as width and height spans. `PlotStack` and
+`plotSlots.ts` render the two-column bento grid, preview drag destinations,
+move panels into empty space, swap occupied slots, and shift stacked panels
+when a tall panel is placed. Plot headers can be dragged, and edge/corner
+handles resize panels. Untouched panels keep their object identity so
+memoised plots don't rebuild. Removing the last panel empties it instead, so
+there's always one.
+
+Layouts are stored in browser local storage under `dawg.live-plots.v1`, keyed
+by device profile. Loading validates saved panel ids, slots and dimensions;
+invalid or older layouts fall back to the default layout and are normalized
+into valid grid slots. This is per-profile persistence, not a named preset
+system.
+
+Right-clicking the graph body opens the graph type menu. A histogram keeps the
+first selected channel when converted from a multi-channel time series; new
+channel selections replace it. Histograms count finite values in the shared
+time range and redraw as live data or the range changes. The bin count is
+configurable in the same menu. Live counts use the store's forward-filled
+rows, so they count displayed samples rather than raw channel updates.
 
 ## Tabs (App.tsx)
 

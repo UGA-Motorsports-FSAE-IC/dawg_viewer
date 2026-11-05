@@ -4,10 +4,13 @@ export type BentoRowSpan = 1 | 2 | 3 | 4
 export type SnapZone = 'left' | 'right' | 'top' | 'bottom'
 
 export const DEFAULT_ROW_HEIGHT = 192
+export type GraphType = 'timeSeries' | 'histogram'
+export type GraphConfig = { type: 'timeSeries' } | { type: 'histogram'; bins: number }
 
 export interface Panel {
   id: number
   channelIds: string[]
+  graph?: GraphConfig
   slot?: { row: number; col: 0 | 1 }
   colSpan?: BentoSpan
   rowSpan?: BentoRowSpan
@@ -27,6 +30,8 @@ export type LayoutAction =
   | { type: 'addPanel' }
   | { type: 'removePanel'; panelId: number }
   | { type: 'setActive'; panelId: number }
+  | { type: 'setGraphType'; panelId: number; graphType: GraphType }
+  | { type: 'setHistogramBins'; panelId: number; bins: number }
   | { type: 'movePanel'; fromId: number; toId: number; snap?: SnapZone }
   | { type: 'movePanelToIndex'; panelId: number; index: number }
   | { type: 'placePanel'; panelId: number; row: number; col: 0 | 1 }
@@ -221,8 +226,35 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
       return updatePanel(layout, layout.activeId, (ids) =>
         ids.includes(action.channelId)
           ? ids.filter((id) => id !== action.channelId)
-          : [...ids, action.channelId],
+          : layout.panels.find((p) => p.id === layout.activeId)?.graph?.type === 'histogram'
+            ? [action.channelId]
+            : [...ids, action.channelId],
       )
+    case 'setGraphType':
+      return {
+        ...layout,
+        panels: layout.panels.map((p) => {
+          if (p.id !== action.panelId || (p.graph?.type ?? 'timeSeries') === action.graphType)
+            return p
+          return action.graphType === 'histogram'
+            ? {
+                ...p,
+                channelIds: p.channelIds.slice(0, 1),
+                graph: { type: 'histogram' as const, bins: 30 },
+              }
+            : { ...p, graph: { type: 'timeSeries' as const } }
+        }),
+      }
+    case 'setHistogramBins':
+      if (!Number.isInteger(action.bins) || action.bins < 5 || action.bins > 200) return layout
+      return {
+        ...layout,
+        panels: layout.panels.map((p) =>
+          p.id === action.panelId && p.graph?.type === 'histogram'
+            ? { ...p, graph: { type: 'histogram', bins: action.bins } }
+            : p,
+        ),
+      }
     case 'removeChannel':
       return updatePanel(layout, action.panelId, (ids) =>
         ids.filter((id) => id !== action.channelId),
@@ -236,7 +268,9 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
     case 'removePanel': {
       if (layout.panels.length === 1) return updatePanel(layout, action.panelId, () => [])
       const remaining = layout.panels.filter((p) => p.id !== action.panelId)
-      const panels = assignPlotSlots(remaining.length === 1 ? [{ ...remaining[0], slot: undefined }] : remaining)
+      const panels = assignPlotSlots(
+        remaining.length === 1 ? [{ ...remaining[0], slot: undefined }] : remaining,
+      )
       const activeId = layout.activeId === action.panelId ? panels[0].id : layout.activeId
       return { ...layout, panels, activeId }
     }
@@ -257,43 +291,49 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
     case 'togglePanelWidth':
       return {
         ...layout,
-        panels: assignPlotSlots(layout.panels.map((p) => {
-          if (p.id !== action.panelId) return p
-          const nextSpan: BentoSpan = (p.colSpan ?? 1) === 2 ? 1 : 2
-          return {
-            ...p,
-            colSpan: nextSpan,
-            widthPct: nextSpan === 2 ? 100 : 50,
-          }
-        })),
+        panels: assignPlotSlots(
+          layout.panels.map((p) => {
+            if (p.id !== action.panelId) return p
+            const nextSpan: BentoSpan = (p.colSpan ?? 1) === 2 ? 1 : 2
+            return {
+              ...p,
+              colSpan: nextSpan,
+              widthPct: nextSpan === 2 ? 100 : 50,
+            }
+          }),
+        ),
       }
     case 'togglePanelHeight':
       return {
         ...layout,
-        panels: assignPlotSlots(layout.panels.map((p) => {
-          if (p.id !== action.panelId) return p
-          const nextRow: BentoRowSpan = (p.rowSpan ?? 1) >= 2 ? 1 : 2
-          return {
-            ...p,
-            rowSpan: nextRow,
-            height: nextRow * DEFAULT_ROW_HEIGHT,
-          }
-        })),
+        panels: assignPlotSlots(
+          layout.panels.map((p) => {
+            if (p.id !== action.panelId) return p
+            const nextRow: BentoRowSpan = (p.rowSpan ?? 1) >= 2 ? 1 : 2
+            return {
+              ...p,
+              rowSpan: nextRow,
+              height: nextRow * DEFAULT_ROW_HEIGHT,
+            }
+          }),
+        ),
       }
     case 'resizePanel':
       return {
         ...layout,
-        panels: assignPlotSlots(layout.panels.map((p) =>
-          p.id === action.panelId
-            ? {
-                ...p,
-                colSpan: action.colSpan ?? p.colSpan,
-                rowSpan: action.rowSpan ?? p.rowSpan,
-                widthPct: action.widthPct ?? p.widthPct,
-                height: action.height ?? p.height,
-              }
-            : p,
-        )),
+        panels: assignPlotSlots(
+          layout.panels.map((p) =>
+            p.id === action.panelId
+              ? {
+                  ...p,
+                  colSpan: action.colSpan ?? p.colSpan,
+                  rowSpan: action.rowSpan ?? p.rowSpan,
+                  widthPct: action.widthPct ?? p.widthPct,
+                  height: action.height ?? p.height,
+                }
+              : p,
+          ),
+        ),
       }
     case 'setLayout':
       return action.layout
@@ -331,10 +371,30 @@ export function loadPlotLayout(profile: string, fallback: Layout): Layout {
         return fallback
       ids.add(p.id)
       const panel: Panel = { id: p.id, channelIds: p.channelIds as string[] }
+      if (p.graph && typeof p.graph === 'object' && !Array.isArray(p.graph)) {
+        const graph = p.graph as Record<string, unknown>
+        if (graph.type === 'histogram') {
+          panel.graph = {
+            type: 'histogram',
+            bins:
+              Number.isInteger(graph.bins) &&
+              (graph.bins as number) >= 5 &&
+              (graph.bins as number) <= 200
+                ? (graph.bins as number)
+                : 30,
+          }
+          panel.channelIds = panel.channelIds.slice(0, 1)
+        } else if (graph.type === 'timeSeries') panel.graph = { type: 'timeSeries' }
+      }
       if (p.slot !== undefined) {
         if (!p.slot || typeof p.slot !== 'object' || Array.isArray(p.slot)) return fallback
         const slot = p.slot as Record<string, unknown>
-        if (!Number.isInteger(slot.row) || (slot.row as number) < 0 || (slot.col !== 0 && slot.col !== 1)) return fallback
+        if (
+          !Number.isInteger(slot.row) ||
+          (slot.row as number) < 0 ||
+          (slot.col !== 0 && slot.col !== 1)
+        )
+          return fallback
         panel.slot = { row: slot.row as number, col: slot.col as 0 | 1 }
       }
       if (p.colSpan) panel.colSpan = p.colSpan

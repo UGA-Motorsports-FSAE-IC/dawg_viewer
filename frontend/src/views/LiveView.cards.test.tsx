@@ -29,6 +29,7 @@ vi.mock('../live/StatusHeader', () => ({ StatusHeader: () => <div>Status</div> }
 vi.mock('../plot/mountPlot', () => ({
   mountPlot: () => ({ u: { setData: vi.fn() }, destroy: vi.fn() }),
 }))
+vi.mock('../plot/HistogramGraph', () => ({ Histogram: () => <div>Histogram</div> }))
 vi.mock('../live/follow', () => ({
   liveSync: {},
   resumeFollow: vi.fn(),

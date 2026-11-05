@@ -1,6 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState, type Dispatch } from 'react'
 import type { Session } from '../data/session'
 import { mountPlot } from '../plot/mountPlot'
+import { Histogram } from '../plot/HistogramGraph'
+import { GraphBody } from './GraphBody'
 import type { ViewSync } from '../plot/sync'
 import {
   DEFAULT_ROW_HEIGHT,
@@ -57,10 +59,14 @@ export const PlotPanel = memo(function PlotPanel({
     () => panel.channelIds.flatMap((id) => session.byId.get(id) ?? []),
     [panel.channelIds, session],
   )
+  const histogramSource = useMemo(
+    () => (channels[0] ? { data: () => ({ time: session.time, values: channels[0].data }) } : null),
+    [channels, session],
+  )
 
   useEffect(() => {
     const host = hostRef.current
-    if (!host || channels.length === 0) return
+    if (!host || channels.length === 0 || panel.graph?.type === 'histogram') return
     const { time } = session
     const plot = mountPlot(host, {
       series: channels,
@@ -76,7 +82,7 @@ export const PlotPanel = memo(function PlotPanel({
       },
     })
     return plot.destroy
-  }, [channels, session, sync])
+  }, [channels, session, sync, panel.graph?.type])
 
   const startEdgeResize = (edge: ResizeEdge) => (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -88,7 +94,11 @@ export const PlotPanel = memo(function PlotPanel({
     const startWidthPct = widthPct
     const rect = sectionRef.current?.getBoundingClientRect()
     const startHeightPx = rect && rect.height > 0 ? rect.height : heightPx
-    const containerWidthPx = (slotted ? sectionRef.current?.parentElement?.parentElement : sectionRef.current?.parentElement)?.clientWidth ?? 0
+    const containerWidthPx =
+      (slotted
+        ? sectionRef.current?.parentElement?.parentElement
+        : sectionRef.current?.parentElement
+      )?.clientWidth ?? 0
 
     setActiveEdge(edge)
 
@@ -246,19 +256,31 @@ export const PlotPanel = memo(function PlotPanel({
         </div>
       </header>
 
-      <div
-        draggable
-        onDragStart={blockDrag}
-        className="relative min-h-0 min-w-0 flex-1 overflow-hidden"
-      >
-        {channels.length === 0 ? (
-          <p className="absolute inset-0 grid place-items-center text-sm text-zinc-600">
-            Pick channels from the list to plot them here
-          </p>
-        ) : (
-          <div ref={hostRef} className="absolute inset-0" />
-        )}
-      </div>
+      <GraphBody panel={panel} dispatch={dispatch}>
+        <div
+          draggable
+          onDragStart={blockDrag}
+          className="relative h-full min-h-0 min-w-0 overflow-hidden"
+        >
+          {channels.length === 0 ? (
+            <p className="absolute inset-0 grid place-items-center text-sm text-zinc-600">
+              Pick channels from the list to plot them here
+            </p>
+          ) : panel.graph?.type === 'histogram' && histogramSource ? (
+            <Histogram
+              key={channels[0].id}
+              source={histogramSource}
+              sync={sync}
+              bins={panel.graph.bins}
+              name={channels[0].name}
+              unit={channels[0].unit}
+              color={channels[0].color}
+            />
+          ) : (
+            <div ref={hostRef} className="absolute inset-0" />
+          )}
+        </div>
+      </GraphBody>
 
       {/* Left edge drag handle */}
       <div

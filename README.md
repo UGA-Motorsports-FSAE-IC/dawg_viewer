@@ -7,10 +7,10 @@ Done:
   - [x] live data view.
   - [x] log/csv download.
   - [x] csv data viewer.
+  - [x] editable, per-device bento plot layouts.
 
 Todo:
-  - [ ] more layouts
-  - [ ] savable/premade presets
+  - [ ] additional layout presets
 
 
 Check out the docs for information, if you are making commits to the project
@@ -23,8 +23,13 @@ ensure that your changes make their way in as well. [docs/](docs/README.md).
 
 The app finds the logger by itself (UDP discovery), learns channel names from
 it and shows the data. Pinned channels appear as cards; pick channels from the
-list on the left to plot them. Scroll on a plot to zoom, shift+scroll to pan,
-drag to zoom to a range; **Resume live** goes back to following new data.
+list on the left to plot them. Live plots can be resized, toggled between
+single- and double-width/double-height panels, and dragged into another grid
+position; the layout is saved separately for each device profile. Right-click
+a graph to switch between a time series and a histogram. A histogram uses the
+first selected channel and counts samples in the current time window. Scroll on a
+plot to zoom, shift+scroll to pan, drag to zoom to a range; **Resume live** goes
+back to following new data.
 
 The first launch may ask to allow network access (Windows Firewall, macOS):
 allow it, or no data can arrive. Only one program can listen on the telemetry
