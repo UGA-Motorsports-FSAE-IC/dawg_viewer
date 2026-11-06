@@ -1,26 +1,14 @@
-import { memo, useEffect, useMemo, useRef, useState, type Dispatch } from 'react'
+import { memo, useEffect, useMemo, useRef, type Dispatch } from 'react'
 import type { Session } from '../data/session'
 import { mountPlot } from '../plot/mountPlot'
 import type { ViewSync } from '../plot/sync'
-import {
-  DEFAULT_ROW_HEIGHT,
-  computeEdgeResize,
-  panelColSpan,
-  panelHeightPx,
-  panelRowSpan,
-  panelWidthPct,
-  setPlotDrag,
-  type LayoutAction,
-  type Panel,
-} from '../state/layout'
-import { bentoPanelClass, panelWidthStyle } from '../ui'
-
-type ResizeEdge = 'left' | 'right' | 'bottom' | 'corner'
+import { setPlotDrag, type LayoutAction, type Panel } from '../state/layout'
+import { plotPanelClass } from '../ui'
+import { PanelControls, type PanelContext } from './PanelControls'
 
 interface Props {
   panel: Panel
-  panels?: Panel[]
-  slotted?: boolean
+  context: PanelContext
   index: number
   active: boolean
   session: Session
@@ -32,26 +20,15 @@ const NO_VALUE = '–'
 
 export const PlotPanel = memo(function PlotPanel({
   panel,
-  panels,
-  slotted = false,
+  context,
   index,
   active,
   session,
   sync,
   dispatch,
 }: Props) {
-  const sectionRef = useRef<HTMLElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const valueEls = useRef(new Map<string, HTMLSpanElement>())
-  const [activeEdge, setActiveEdge] = useState<ResizeEdge | null>(null)
-
-  const totalPanels = panels?.length ?? 2
-  const colSpan = panelColSpan(panel, totalPanels)
-  const widthPct = panelWidthPct(panel, totalPanels)
-  const rowSpan = panelRowSpan(panel)
-  const heightPx = panelHeightPx(panel) ?? rowSpan * DEFAULT_ROW_HEIGHT
-  const prevId = panels && index > 0 ? panels[index - 1]?.id : undefined
-  const nextId = panels && index < panels.length - 1 ? panels[index + 1]?.id : undefined
 
   const channels = useMemo(
     () => panel.channelIds.flatMap((id) => session.byId.get(id) ?? []),
@@ -78,54 +55,6 @@ export const PlotPanel = memo(function PlotPanel({
     return plot.destroy
   }, [channels, session, sync])
 
-  const startEdgeResize = (edge: ResizeEdge) => (event: React.PointerEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    const startX = event.clientX
-    const startY = event.clientY
-    const startCol = colSpan
-    const startRow = rowSpan
-    const startWidthPct = widthPct
-    const rect = sectionRef.current?.getBoundingClientRect()
-    const startHeightPx = rect && rect.height > 0 ? rect.height : heightPx
-    const containerWidthPx = (slotted ? sectionRef.current?.parentElement?.parentElement : sectionRef.current?.parentElement)?.clientWidth ?? 0
-
-    setActiveEdge(edge)
-
-    const onMove = (moveEvent: PointerEvent) => {
-      const dx = moveEvent.clientX - startX
-      const dy = moveEvent.clientY - startY
-      const next = computeEdgeResize(edge, dx, dy, startCol, startRow, {
-        startWidthPct,
-        startHeightPx,
-        containerWidthPx,
-      })
-      if (sectionRef.current) {
-        if (next.widthPct !== undefined) {
-          sectionRef.current.style.width = slotted ? '100%' : panelWidthStyle(next.widthPct)
-        }
-        if (next.height !== undefined) {
-          sectionRef.current.style.height = `${next.height}px`
-        }
-      }
-      dispatch({
-        type: 'resizePanel',
-        panelId: panel.id,
-        colSpan: next.colSpan,
-        rowSpan: next.rowSpan,
-        widthPct: next.widthPct,
-        height: next.height,
-      })
-    }
-    const onUp = () => {
-      setActiveEdge(null)
-      document.removeEventListener('pointermove', onMove)
-      document.removeEventListener('pointerup', onUp)
-    }
-    document.addEventListener('pointermove', onMove)
-    document.addEventListener('pointerup', onUp)
-  }
-
   const blockDrag = (event: React.DragEvent) => {
     event.preventDefault()
     event.stopPropagation()
@@ -133,23 +62,14 @@ export const PlotPanel = memo(function PlotPanel({
 
   return (
     <section
-      ref={sectionRef}
       aria-label={`Plot ${index + 1}`}
       data-panel-id={panel.id}
-      draggable={activeEdge === null}
-      style={{
-        width: slotted ? '100%' : panelWidthStyle(widthPct),
-        height: `${heightPx}px`,
-      }}
+      draggable
       onDragStart={(event) => {
-        if (activeEdge !== null) {
-          event.preventDefault()
-          return
-        }
-        setPlotDrag(panel.id, index)
+        setPlotDrag(panel.id)
         if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
       }}
-      className={bentoPanelClass(active, colSpan, rowSpan)}
+      className={plotPanelClass(active)}
       onPointerDown={() => dispatch({ type: 'setActive', panelId: panel.id })}
     >
       <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-1 text-xs">
@@ -185,64 +105,7 @@ export const PlotPanel = memo(function PlotPanel({
           ))}
         </ul>
         <div className="flex shrink-0 items-center gap-1.5">
-          {panels && panels.length > 1 && (
-            <>
-              <button
-                type="button"
-                aria-label={`Move plot ${index + 1} left`}
-                disabled={prevId === undefined}
-                className="text-zinc-500 hover:text-zinc-200 disabled:opacity-30"
-                onClick={() => {
-                  const slot = panels?.[index - 1]?.slot
-                  if (slot) dispatch({ type: 'placePanel', panelId: panel.id, ...slot })
-                }}
-              >
-                ←
-              </button>
-              <button
-                type="button"
-                aria-label={`Move plot ${index + 1} right`}
-                disabled={nextId === undefined}
-                className="text-zinc-500 hover:text-zinc-200 disabled:opacity-30"
-                onClick={() => {
-                  const slot = panels?.[index + 1]?.slot
-                  if (slot) dispatch({ type: 'placePanel', panelId: panel.id, ...slot })
-                }}
-              >
-                →
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            aria-label={`Toggle plot ${index + 1} width`}
-            aria-pressed={colSpan === 2}
-            className={`rounded px-1 text-[11px] ${
-              colSpan === 2 ? 'bg-red-500/20 text-red-300' : 'text-zinc-500 hover:text-zinc-200'
-            }`}
-            onClick={() => dispatch({ type: 'togglePanelWidth', panelId: panel.id })}
-          >
-            Wide
-          </button>
-          <button
-            type="button"
-            aria-label={`Toggle plot ${index + 1} height`}
-            aria-pressed={rowSpan >= 2}
-            className={`rounded px-1 text-[11px] ${
-              rowSpan >= 2 ? 'bg-red-500/20 text-red-300' : 'text-zinc-500 hover:text-zinc-200'
-            }`}
-            onClick={() => dispatch({ type: 'togglePanelHeight', panelId: panel.id })}
-          >
-            Tall
-          </button>
-          <button
-            type="button"
-            aria-label={`Close plot ${index + 1}`}
-            className="text-zinc-600 hover:text-zinc-200"
-            onClick={() => dispatch({ type: 'removePanel', panelId: panel.id })}
-          >
-            ✕
-          </button>
+          <PanelControls panelId={panel.id} index={index} context={context} dispatch={dispatch} />
         </div>
       </header>
 
@@ -259,66 +122,6 @@ export const PlotPanel = memo(function PlotPanel({
           <div ref={hostRef} className="absolute inset-0" />
         )}
       </div>
-
-      {/* Left edge drag handle */}
-      <div
-        role="separator"
-        aria-label={`Drag left edge of plot ${index + 1}`}
-        data-edge="left"
-        title="Drag edge to dynamically resize width"
-        draggable
-        onDragStart={blockDrag}
-        onPointerDown={startEdgeResize('left')}
-        onDoubleClick={() => dispatch({ type: 'togglePanelWidth', panelId: panel.id })}
-        className={`absolute top-0 bottom-2 left-0 z-10 w-2 cursor-ew-resize transition-colors hover:bg-red-500/40 ${
-          activeEdge === 'left' ? 'bg-red-500/60' : ''
-        }`}
-      />
-
-      {/* Right edge drag handle */}
-      <div
-        role="separator"
-        aria-label={`Drag right edge of plot ${index + 1}`}
-        data-edge="right"
-        title="Drag edge to dynamically resize width"
-        draggable
-        onDragStart={blockDrag}
-        onPointerDown={startEdgeResize('right')}
-        onDoubleClick={() => dispatch({ type: 'togglePanelWidth', panelId: panel.id })}
-        className={`absolute top-0 right-0 bottom-2 z-10 w-2 cursor-ew-resize transition-colors hover:bg-red-500/40 ${
-          activeEdge === 'right' ? 'bg-red-500/60' : ''
-        }`}
-      />
-
-      {/* Bottom edge drag handle */}
-      <div
-        role="separator"
-        aria-label={`Drag bottom edge of plot ${index + 1}`}
-        data-edge="bottom"
-        title="Drag edge to dynamically resize height"
-        draggable
-        onDragStart={blockDrag}
-        onPointerDown={startEdgeResize('bottom')}
-        onDoubleClick={() => dispatch({ type: 'togglePanelHeight', panelId: panel.id })}
-        className={`absolute right-2 bottom-0 left-0 z-10 h-2 cursor-ns-resize transition-colors hover:bg-red-500/40 ${
-          activeEdge === 'bottom' ? 'bg-red-500/60' : ''
-        }`}
-      />
-
-      {/* Bottom-right corner drag handle */}
-      <div
-        role="separator"
-        aria-label={`Resize plot ${index + 1}`}
-        data-edge="corner"
-        title="Drag corner to dynamically resize plot"
-        draggable
-        onDragStart={blockDrag}
-        onPointerDown={startEdgeResize('corner')}
-        onDoubleClick={() => dispatch({ type: 'togglePanelWidth', panelId: panel.id })}
-        className={`absolute right-0 bottom-0 z-20 size-3.5 cursor-nwse-resize border-r-2 border-b-2 transition-colors hover:border-red-500 ${
-          activeEdge === 'corner' ? 'border-red-500 bg-red-500/30' : 'border-zinc-600'
-        }`}
-      />
     </section>
   )
 })

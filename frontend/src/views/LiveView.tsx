@@ -166,14 +166,13 @@ export function LiveView() {
             </button>
           </div>
           <PlotStack
-            panels={layout.panels}
+            layout={layout}
             dispatch={dispatch}
-            renderPanel={(panel, i) => (
+            renderPanel={(panel, i, context) => (
               <LivePlotPanel
                 key={panel.id}
                 panel={panel}
-                slotted
-                panels={layout.panels}
+                context={context}
                 index={i}
                 active={panel.id === layout.activeId}
                 known={known}
