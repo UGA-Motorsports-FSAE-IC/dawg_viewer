@@ -28,8 +28,10 @@ single- and double-width/double-height panels, and dragged into another grid
 position; the layout is saved separately for each device profile. Right-click
 a graph to switch between a time series and a histogram. A histogram uses the
 first selected channel and counts samples in the current time window. The same
-settings panel adjusts bin count, value range, axes, and stream colors; color
-changes apply across plots. Scroll on a
+settings panel adjusts bin count, value range, axes, and stream colors. Choose
+one of the original ten colors or enter a six-digit hex code; changes apply
+across plots. Histogram headers continue showing the newest channel value.
+Scroll on a
 plot to zoom, shift+scroll to pan, drag to zoom to a range; **Resume live** goes
 back to following new data.
 

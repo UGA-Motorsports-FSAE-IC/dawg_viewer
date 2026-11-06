@@ -4,6 +4,7 @@ import { CHANNEL_COLORS } from './session'
 const KEY = 'dawg.stream-colors.v1'
 const listeners = new Set<() => void>()
 const overrides = new Map<string, string>()
+const defaults = new Map<string, string>()
 try {
   const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Record<string, unknown>
   for (const [id, color] of Object.entries(saved))
@@ -12,18 +13,19 @@ try {
   /* storage may be unavailable */
 }
 
-export function streamColor(id: string): string {
+export const palette = CHANNEL_COLORS
+
+export function streamColor(id: string, preferredIndex?: number): string {
   const override = overrides.get(id)
-  if (override) return override
-  let hash = 0
-  for (const char of id) hash = (Math.imul(hash, 31) + char.charCodeAt(0)) | 0
-  return CHANNEL_COLORS[(hash >>> 0) % CHANNEL_COLORS.length]
+  if (!defaults.has(id))
+    defaults.set(id, CHANNEL_COLORS[(preferredIndex ?? defaults.size) % CHANNEL_COLORS.length])
+  return override ?? defaults.get(id)!
 }
 
 export function setStreamColor(id: string, color: string | null) {
   if (color !== null && !/^#[0-9a-f]{6}$/i.test(color)) return
   if (color === null) overrides.delete(id)
-  else overrides.set(id, color)
+  else overrides.set(id, color.toLowerCase())
   try {
     localStorage.setItem(KEY, JSON.stringify(Object.fromEntries(overrides)))
   } catch {

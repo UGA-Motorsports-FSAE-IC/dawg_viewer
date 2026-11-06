@@ -23,7 +23,7 @@ export async function openLog(path: string): Promise<Session> {
     name: c.name,
     group: 'Log',
     unit: c.unit || metas[c.name]?.unit || '',
-    color: streamColor(c.name),
+    color: streamColor(c.name, i),
     precision: metas[c.name]?.precision ?? 2,
     data: new Float64Array(buf, (i + 1) * rows * 8, rows),
   }))

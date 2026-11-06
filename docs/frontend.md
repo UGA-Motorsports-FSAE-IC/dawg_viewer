@@ -124,6 +124,9 @@ The plot settings popover also lists every selected stream with a global color
 override. Color changes are stored under `dawg.stream-colors.v1` and update
 both Live and Viewer plots. Histograms can use a custom value range, horizontal
 orientation, percentages, and a manual frequency-axis maximum.
+The color picker offers the original ten channel colors plus a hex field.
+The live histogram header subscribes to the store so its channel value keeps
+updating even though the histogram renderer has no time-series cursor.
 
 ## Tabs (App.tsx)
 

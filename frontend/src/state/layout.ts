@@ -4,6 +4,7 @@ export type BentoRowSpan = 1 | 2 | 3 | 4
 export type SnapZone = 'left' | 'right' | 'top' | 'bottom'
 
 export const DEFAULT_ROW_HEIGHT = 192
+const MAX_PANEL_STREAMS = 7
 export type GraphType = 'timeSeries' | 'histogram'
 export type GraphConfig =
   | { type: 'timeSeries' }
@@ -79,7 +80,12 @@ export function clearPlotDrag() {
 
 export function makeLayout(panels: string[][]): Layout {
   return {
-    panels: assignPlotSlots(panels.map((channelIds, i) => ({ id: i + 1, channelIds }))),
+    panels: assignPlotSlots(
+      panels.map((channelIds, i) => ({
+        id: i + 1,
+        channelIds: channelIds.slice(0, MAX_PANEL_STREAMS),
+      })),
+    ),
     activeId: 1,
     nextId: panels.length + 1,
   }
@@ -242,7 +248,9 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
           ? ids.filter((id) => id !== action.channelId)
           : layout.panels.find((p) => p.id === layout.activeId)?.graph?.type === 'histogram'
             ? [action.channelId]
-            : [...ids, action.channelId],
+            : ids.length < MAX_PANEL_STREAMS
+              ? [...ids, action.channelId]
+              : ids,
       )
     case 'setGraphType':
       return {
@@ -420,7 +428,10 @@ export function loadPlotLayout(profile: string, fallback: Layout): Layout {
       )
         return fallback
       ids.add(p.id)
-      const panel: Panel = { id: p.id, channelIds: p.channelIds as string[] }
+      const panel: Panel = {
+        id: p.id,
+        channelIds: (p.channelIds as string[]).slice(0, MAX_PANEL_STREAMS),
+      }
       if (p.graph && typeof p.graph === 'object' && !Array.isArray(p.graph)) {
         const graph = p.graph as Record<string, unknown>
         if (graph.type === 'histogram') {

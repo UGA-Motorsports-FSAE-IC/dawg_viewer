@@ -124,6 +124,18 @@ export const LivePlotPanel = memo(function LivePlotPanel({
     }
   }, [names, metas, sync, panel.graph?.type, colorsKey])
 
+  useEffect(() => {
+    if (panel.graph?.type !== 'histogram' || names.length === 0) return
+    const showLatest = () => {
+      for (const name of names) {
+        const el = valueEls.current.get(name)
+        if (el) el.textContent = formatValue(store.latest(name), metas[name])
+      }
+    }
+    showLatest()
+    return store.subscribe(showLatest)
+  }, [panel.graph?.type, names, metas])
+
   const startEdgeResize = (edge: ResizeEdge) => (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
     event.stopPropagation()

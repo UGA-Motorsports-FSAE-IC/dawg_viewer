@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { setStreamColor, streamColor, useStreamColors } from '../data/streamColors'
+import { useStreamColors } from '../data/streamColors'
+import { StreamColorPicker } from './StreamColorPicker'
 import type { LayoutAction, Panel } from '../state/layout'
 
 const input =
@@ -152,30 +153,7 @@ export function GraphBody({
                 <p className="text-xs text-zinc-500">No streams selected</p>
               )}
               {panel.channelIds.map((id) => (
-                <div key={id} className="mb-2 flex items-center gap-2 text-xs">
-                  <span
-                    className="size-2 shrink-0 rounded-full"
-                    style={{ background: streamColor(id) }}
-                  />
-                  <span className="min-w-0 flex-1 truncate" title={id}>
-                    {id}
-                  </span>
-                  <input
-                    type="color"
-                    aria-label={`Color for ${id}`}
-                    value={streamColor(id)}
-                    onChange={(e) => setStreamColor(id, e.target.value)}
-                    className="h-7 w-8 cursor-pointer bg-transparent"
-                  />
-                  <button
-                    type="button"
-                    aria-label={`Reset color for ${id}`}
-                    onClick={() => setStreamColor(id, null)}
-                    className="text-zinc-500 hover:text-zinc-100"
-                  >
-                    Reset
-                  </button>
-                </div>
+                <StreamColorPicker key={id} id={id} />
               ))}
             </section>
             {graph?.type === 'histogram' && (
