@@ -88,14 +88,13 @@ function LoadedLog({
           dispatch={dispatch}
         />
         <PlotStack
-          panels={layout.panels}
+          layout={layout}
           dispatch={dispatch}
-          renderPanel={(panel, i) => (
+          renderPanel={(panel, i, context) => (
             <PlotPanel
               key={panel.id}
               panel={panel}
-              slotted
-              panels={layout.panels}
+              context={context}
               index={i}
               active={panel.id === layout.activeId}
               session={session}

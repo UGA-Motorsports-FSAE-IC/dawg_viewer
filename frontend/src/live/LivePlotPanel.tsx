@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type Dispatch } from 'react'
+import { memo, useEffect, useMemo, useRef, type Dispatch } from 'react'
 import type uPlot from 'uplot'
 import type { ChannelMeta } from '../../bindings/dawg_viewer/internal/config/models'
 import { mountPlot } from '../plot/mountPlot'
@@ -6,27 +6,15 @@ import { Histogram } from '../plot/HistogramGraph'
 import { GraphBody } from '../components/GraphBody'
 import { useStreamColors } from '../data/streamColors'
 import type { ViewSync } from '../plot/sync'
-import {
-  DEFAULT_ROW_HEIGHT,
-  computeEdgeResize,
-  panelColSpan,
-  panelHeightPx,
-  panelRowSpan,
-  panelWidthPct,
-  setPlotDrag,
-  type LayoutAction,
-  type Panel,
-} from '../state/layout'
-import { bentoPanelClass, panelWidthStyle } from '../ui'
+import { setPlotDrag, type LayoutAction, type Panel } from '../state/layout'
+import { plotPanelClass } from '../ui'
+import { PanelControls, type PanelContext } from '../components/PanelControls'
 import { colorFor, store } from './connection'
 import { formatValue } from './format'
 
-type ResizeEdge = 'left' | 'right' | 'bottom' | 'corner'
-
 interface Props {
   panel: Panel
-  panels?: Panel[]
-  slotted?: boolean
+  context: PanelContext
   index: number
   active: boolean
   known: ReadonlySet<string>
@@ -57,8 +45,7 @@ function liveHistogramSource(name: string) {
 
 export const LivePlotPanel = memo(function LivePlotPanel({
   panel,
-  panels,
-  slotted = false,
+  context,
   index,
   active,
   known,
@@ -70,15 +57,6 @@ export const LivePlotPanel = memo(function LivePlotPanel({
   const sectionRef = useRef<HTMLElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const valueEls = useRef(new Map<string, HTMLSpanElement>())
-  const [activeEdge, setActiveEdge] = useState<ResizeEdge | null>(null)
-
-  const totalPanels = panels?.length ?? 2
-  const colSpan = panelColSpan(panel, totalPanels)
-  const widthPct = panelWidthPct(panel, totalPanels)
-  const rowSpan = panelRowSpan(panel)
-  const heightPx = panelHeightPx(panel) ?? rowSpan * DEFAULT_ROW_HEIGHT
-  const prevId = panels && index > 0 ? panels[index - 1]?.id : undefined
-  const nextId = panels && index < panels.length - 1 ? panels[index + 1]?.id : undefined
 
   const namesKey = panel.channelIds.filter((n) => known.has(n)).join('\n')
   const names = useMemo(() => (namesKey ? namesKey.split('\n') : []), [namesKey])
@@ -195,23 +173,14 @@ export const LivePlotPanel = memo(function LivePlotPanel({
 
   return (
     <section
-      ref={sectionRef}
       aria-label={`Plot ${index + 1}`}
       data-panel-id={panel.id}
-      draggable={activeEdge === null}
-      style={{
-        width: slotted ? '100%' : panelWidthStyle(widthPct),
-        height: `${heightPx}px`,
-      }}
+      draggable
       onDragStart={(event) => {
-        if (activeEdge !== null) {
-          event.preventDefault()
-          return
-        }
-        setPlotDrag(panel.id, index)
+        setPlotDrag(panel.id)
         if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
       }}
-      className={bentoPanelClass(active, colSpan, rowSpan)}
+      className={plotPanelClass(active)}
       onPointerDown={() => dispatch({ type: 'setActive', panelId: panel.id })}
     >
       <header className="flex items-center gap-2 border-b border-zinc-800 px-3 py-1 text-xs">
@@ -247,64 +216,7 @@ export const LivePlotPanel = memo(function LivePlotPanel({
           ))}
         </ul>
         <div className="flex shrink-0 items-center gap-1.5">
-          {panels && panels.length > 1 && (
-            <>
-              <button
-                type="button"
-                aria-label={`Move plot ${index + 1} left`}
-                disabled={prevId === undefined}
-                className="text-zinc-500 hover:text-zinc-200 disabled:opacity-30"
-                onClick={() => {
-                  const slot = panels?.[index - 1]?.slot
-                  if (slot) dispatch({ type: 'placePanel', panelId: panel.id, ...slot })
-                }}
-              >
-                ←
-              </button>
-              <button
-                type="button"
-                aria-label={`Move plot ${index + 1} right`}
-                disabled={nextId === undefined}
-                className="text-zinc-500 hover:text-zinc-200 disabled:opacity-30"
-                onClick={() => {
-                  const slot = panels?.[index + 1]?.slot
-                  if (slot) dispatch({ type: 'placePanel', panelId: panel.id, ...slot })
-                }}
-              >
-                →
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            aria-label={`Toggle plot ${index + 1} width`}
-            aria-pressed={colSpan === 2}
-            className={`rounded px-1 text-[11px] ${
-              colSpan === 2 ? 'bg-red-500/20 text-red-300' : 'text-zinc-500 hover:text-zinc-200'
-            }`}
-            onClick={() => dispatch({ type: 'togglePanelWidth', panelId: panel.id })}
-          >
-            Wide
-          </button>
-          <button
-            type="button"
-            aria-label={`Toggle plot ${index + 1} height`}
-            aria-pressed={rowSpan >= 2}
-            className={`rounded px-1 text-[11px] ${
-              rowSpan >= 2 ? 'bg-red-500/20 text-red-300' : 'text-zinc-500 hover:text-zinc-200'
-            }`}
-            onClick={() => dispatch({ type: 'togglePanelHeight', panelId: panel.id })}
-          >
-            Tall
-          </button>
-          <button
-            type="button"
-            aria-label={`Close plot ${index + 1}`}
-            className="text-zinc-600 hover:text-zinc-200"
-            onClick={() => dispatch({ type: 'removePanel', panelId: panel.id })}
-          >
-            ✕
-          </button>
+          <PanelControls panelId={panel.id} index={index} context={context} dispatch={dispatch} />
         </div>
       </header>
 

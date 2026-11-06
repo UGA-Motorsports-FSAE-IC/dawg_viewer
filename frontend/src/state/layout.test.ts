@@ -1,17 +1,21 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  computeEdgeResize,
-  detectSnapZone,
+  DEFAULT_ROW_HEIGHT,
+  MAX_ROW_HEIGHT,
+  MIN_ROW_HEIGHT,
+  detectDropZone,
+  joinTarget,
   layoutReducer,
   loadPlotLayout,
   makeLayout,
-  panelColSpan,
-  panelRowSpan,
+  orderedPanels,
   savePlotLayout,
+  type Layout,
 } from './layout'
-import { previewPlotPlacement, validPlacement } from './plotSlots'
 
 beforeEach(() => localStorage.clear())
+
+const order = (l: Layout) => l.rows.map((r) => r.panelIds)
 
 describe('layoutReducer', () => {
   it('caps each time-series panel at seven streams without affecting other panels', () => {
@@ -57,49 +61,54 @@ describe('layoutReducer', () => {
     let layout = makeLayout([['RPM'], ['TPS1']])
     layout = layoutReducer(layout, { type: 'setActive', panelId: 2 })
     layout = layoutReducer(layout, { type: 'toggleChannel', channelId: 'RPM' })
-    expect(layout.panels.map((panel) => panel.channelIds)).toEqual([['RPM'], ['TPS1', 'RPM']])
+    expect(layout.panels.map((p) => p.channelIds)).toEqual([['RPM'], ['TPS1', 'RPM']])
     layout = layoutReducer(layout, { type: 'removeChannel', panelId: 2, channelId: 'TPS1' })
     expect(layout.panels[1].channelIds).toEqual(['RPM'])
   })
 
-  it('chooses a remaining panel when the active one is removed', () => {
+  it('stacks new plots and keeps one empty plot when the last is removed', () => {
     let layout = makeLayout([['RPM']])
     layout = layoutReducer(layout, { type: 'addPanel' })
+    expect(order(layout)).toEqual([[1], [2]])
     expect(layout.activeId).toBe(2)
     layout = layoutReducer(layout, { type: 'removePanel', panelId: 2 })
     expect(layout.activeId).toBe(1)
     layout = layoutReducer(layout, { type: 'removePanel', panelId: 1 })
-    expect(layout.panels).toEqual([{ id: 1, channelIds: [], slot: { row: 0, col: 0 } }])
+    expect(layout.panels).toEqual([{ id: 1, channelIds: [] }])
+    expect(order(layout)).toEqual([[1]])
   })
 
-  it('moves and snaps plots together in a bento grid', () => {
-    let layout = makeLayout([['RPM'], ['TPS1'], ['CLT1']])
-    layout = layoutReducer(layout, { type: 'togglePanelWidth', panelId: 1 })
-    layout = layoutReducer(layout, { type: 'togglePanelWidth', panelId: 3 })
-    expect(layout.panels[0].colSpan).toBe(2)
-    expect(layout.panels[2].colSpan).toBe(2)
-
-    // Snap panel 3 to the left of panel 1 -> places panel 3 before panel 1 and snaps both to 1-col side-by-side
-    layout = layoutReducer(layout, { type: 'movePanel', fromId: 3, toId: 1, snap: 'left' })
-    expect(layout.panels.map((p) => p.id)).toEqual([3, 1, 2])
-    expect(layout.panels[0].colSpan).toBe(1)
-    expect(layout.panels[1].colSpan).toBe(1)
-
-    // Snap panel 3 to the bottom of panel 2 -> places panel 3 after panel 2
-    layout = layoutReducer(layout, { type: 'movePanel', fromId: 3, toId: 2, snap: 'bottom' })
-    expect(layout.panels.map((p) => p.id)).toEqual([1, 2, 3])
-
-    // Direct move without snap zone
-    layout = layoutReducer(layout, { type: 'movePanel', fromId: 3, toId: 1 })
-    expect(layout.panels.map((p) => p.id)).toEqual([3, 1, 2])
+  it('pairs plots by dropping on a side and stacks them by dropping on an edge', () => {
+    let layout = makeLayout([['A'], ['B'], ['C']])
+    layout = layoutReducer(layout, { type: 'dropPanel', panelId: 3, targetId: 1, zone: 'left' })
+    expect(order(layout)).toEqual([[3, 1], [2]])
+    layout = layoutReducer(layout, { type: 'dropPanel', panelId: 3, targetId: 2, zone: 'bottom' })
+    expect(order(layout)).toEqual([[1], [2], [3]])
+    layout = layoutReducer(layout, { type: 'dropPanel', panelId: 3, targetId: 1, zone: 'top' })
+    expect(order(layout)).toEqual([[3], [1], [2]])
   })
 
-  it('moves a plot to the phantom index without changing its size', () => {
-    let layout = makeLayout([['RPM'], ['TPS1'], ['CLT1']])
-    layout = layoutReducer(layout, { type: 'togglePanelWidth', panelId: 1 })
-    layout = layoutReducer(layout, { type: 'movePanelToIndex', panelId: 1, index: 2 })
-    expect(layout.panels.map((panel) => panel.id)).toEqual([2, 3, 1])
-    expect(layout.panels[2].colSpan).toBe(2)
+  it('swaps plots when dropped in the middle or on the side of a pair', () => {
+    let layout = makeLayout([['A'], ['B'], ['C']])
+    layout = layoutReducer(layout, { type: 'dropPanel', panelId: 2, targetId: 1, zone: 'right' })
+    expect(order(layout)).toEqual([[1, 2], [3]])
+    layout = layoutReducer(layout, { type: 'dropPanel', panelId: 3, targetId: 1, zone: 'swap' })
+    expect(order(layout)).toEqual([[3, 2], [1]])
+    layout = layoutReducer(layout, { type: 'dropPanel', panelId: 1, targetId: 3, zone: 'left' })
+    expect(order(layout)).toEqual([[1, 2], [3]])
+  })
+
+  it('moves a whole pair and gives it one shared height', () => {
+    let layout = makeLayout([['A'], ['B'], ['C']])
+    layout = layoutReducer(layout, { type: 'joinPanel', panelId: 2 })
+    expect(order(layout)).toEqual([[1, 2], [3]])
+    const pair = layout.rows[0]
+    layout = layoutReducer(layout, { type: 'setRowHeight', rowId: pair.id, height: 333 })
+    expect(layout.rows[0].height).toBe(333)
+    layout = layoutReducer(layout, { type: 'moveRow', rowId: pair.id, toIndex: 1 })
+    expect(order(layout)).toEqual([[3], [1, 2]])
+    expect(layout.rows[1].height).toBe(333)
+    expect(orderedPanels(layout).map((p) => p.id)).toEqual([3, 1, 2])
   })
 
   it('swaps occupied slots and moves into empty space without shifting other plots', () => {
@@ -153,86 +162,57 @@ describe('layoutReducer', () => {
     expect(loadPlotLayout('tall-swap', makeLayout([['RPM']]))).toEqual(layout)
   })
 
-  it('keeps wide and tall plots from overlapping and repacks after removal', () => {
-    let layout = makeLayout([['RPM'], ['TPS1']])
-    layout = layoutReducer(layout, { type: 'togglePanelWidth', panelId: 1 })
-    layout = layoutReducer(layout, { type: 'togglePanelHeight', panelId: 1 })
-    expect(validPlacement(layout.panels)).toBe(true)
-    expect(layout.panels[1].slot).toEqual({ row: 2, col: 0 })
-    layout = layoutReducer(layout, { type: 'placePanel', panelId: 2, row: 0, col: 1 })
-    expect(validPlacement(layout.panels)).toBe(true)
-    expect(layout.panels[0].slot).toEqual({ row: 2, col: 0 })
+  it('removing one plot of a pair keeps the other with the row height', () => {
+    let layout = makeLayout([['A'], ['B']])
+    layout = layoutReducer(layout, { type: 'joinPanel', panelId: 2 })
+    layout = layoutReducer(layout, { type: 'setRowHeight', rowId: layout.rows[0].id, height: 300 })
     layout = layoutReducer(layout, { type: 'removePanel', panelId: 1 })
-    expect(layout.panels[0].slot).toEqual({ row: 0, col: 0 })
+    expect(order(layout)).toEqual([[2]])
+    expect(layout.rows[0].height).toBe(300)
   })
+})
 
-  it('toggles and resizes bento panel spans and detects snap zones', () => {
-    let layout = makeLayout([['RPM'], ['TPS1']])
-    expect(panelColSpan(layout.panels[0], 1)).toBe(2)
-    expect(panelColSpan(layout.panels[0], 2)).toBe(1)
-    expect(panelRowSpan(layout.panels[0])).toBe(1)
-
-    layout = layoutReducer(layout, { type: 'togglePanelHeight', panelId: 1 })
-    expect(panelRowSpan(layout.panels[0])).toBe(2)
-    layout = layoutReducer(layout, { type: 'togglePanelHeight', panelId: 1 })
-    expect(panelRowSpan(layout.panels[0])).toBe(1)
-
-    layout = layoutReducer(layout, {
-      type: 'resizePanel',
-      panelId: 2,
-      colSpan: 2,
-      rowSpan: 2,
-    })
-    expect(layout.panels[1].colSpan).toBe(2)
-    expect(layout.panels[1].rowSpan).toBe(2)
-
-    const rect = { left: 0, top: 0, width: 200, height: 100 }
-    expect(detectSnapZone(10, 50, rect, 0, 1)).toBe('left')
-    expect(detectSnapZone(190, 50, rect, 0, 1)).toBe('right')
-    expect(detectSnapZone(100, 5, rect, 0, 1)).toBe('top')
-    expect(detectSnapZone(100, 95, rect, 0, 1)).toBe('bottom')
-    expect(detectSnapZone(0, 0, { left: 0, top: 0, width: 0, height: 0 }, 0, 1)).toBe('right')
-    expect(detectSnapZone(0, 0, { left: 0, top: 0, width: 0, height: 0 }, 2, 0)).toBe('left')
-
-    expect(computeEdgeResize('right', 50, 0, 1, 1)).toEqual({
-      colSpan: 2,
-      widthPct: 81.25,
-    })
-    expect(computeEdgeResize('left', -50, 0, 1, 1)).toEqual({
-      colSpan: 2,
-      widthPct: 81.25,
-    })
-    expect(computeEdgeResize('bottom', 0, 25, 1, 1)).toEqual({
-      rowSpan: 1,
-      height: 217,
-    })
-    expect(computeEdgeResize('bottom', 0, 60, 1, 1)).toEqual({
-      rowSpan: 2,
-      height: 252,
-    })
-    expect(computeEdgeResize('bottom', 0, 350, 1, 1)).toEqual({
-      rowSpan: 3,
-      height: 542,
-    })
-    expect(computeEdgeResize('corner', 60, 80, 1, 1)).toEqual({
-      colSpan: 2,
-      widthPct: 87.5,
-      rowSpan: 2,
-      height: 272,
-    })
+describe('detectDropZone', () => {
+  it('uses edge bands and the middle swaps', () => {
+    expect(detectDropZone(0.05, 0.5)).toBe('left')
+    expect(detectDropZone(0.95, 0.5)).toBe('right')
+    expect(detectDropZone(0.5, 0.05)).toBe('top')
+    expect(detectDropZone(0.5, 0.95)).toBe('bottom')
+    expect(detectDropZone(0.5, 0.5)).toBe('swap')
   })
+})
 
-  it('saves and loads plot bento layouts per profile', () => {
+describe('persistence', () => {
+  it('saves and loads layouts per profile', () => {
     const fallback = makeLayout([['RPM']])
     let custom = makeLayout([['RPM', 'TPS1'], ['VSS']])
-    custom = layoutReducer(custom, { type: 'togglePanelWidth', panelId: 1 })
-    custom = layoutReducer(custom, { type: 'togglePanelHeight', panelId: 2 })
-
+    custom = layoutReducer(custom, { type: 'joinPanel', panelId: 1 })
+    custom = layoutReducer(custom, { type: 'setRowHeight', rowId: 1, height: 250 })
     savePlotLayout('car-a', custom)
     expect(loadPlotLayout('car-a', fallback)).toEqual(custom)
     expect(loadPlotLayout('car-b', fallback)).toEqual(fallback)
-
-    localStorage.setItem('dawg.live-plots.v1', JSON.stringify({ 'car-a': { panels: 'invalid' } }))
+    localStorage.setItem('dawg.live-plots.v2', JSON.stringify({ 'car-a': { panels: 'invalid' } }))
     expect(loadPlotLayout('car-a', fallback)).toEqual(fallback)
+  })
+
+  it('migrates the old bento layout into rows', () => {
+    localStorage.setItem(
+      'dawg.live-plots.v1',
+      JSON.stringify({
+        car: {
+          panels: [
+            { id: 1, channelIds: ['A'], slot: { row: 0, col: 0 }, colSpan: 1, height: 200 },
+            { id: 2, channelIds: ['B'], slot: { row: 0, col: 1 }, colSpan: 1, height: 300 },
+            { id: 3, channelIds: ['C'], slot: { row: 1, col: 0 }, colSpan: 2, rowSpan: 2 },
+          ],
+          activeId: 2,
+          nextId: 4,
+        },
+      }),
+    )
+    const layout = loadPlotLayout('car', makeLayout([['X']]))
+    expect(order(layout)).toEqual([[1, 2], [3]])
+    expect(layout.rows.map((r) => r.height)).toEqual([300, 2 * DEFAULT_ROW_HEIGHT])
+    expect(layout.activeId).toBe(2)
   })
 })
