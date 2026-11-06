@@ -8,6 +8,7 @@ import { createViewSync } from '../plot/sync'
 import { layoutReducer, makeLayout } from '../state/layout'
 import { toolbarButton } from '../ui'
 import { startingPanels } from '../viewer/openLog'
+import type { PlotLayoutMode } from '../settings/plotLayout'
 
 const sync = createViewSync('viewer')
 const NO_CHANNELS: string[] = []
@@ -17,13 +18,20 @@ interface Props {
   loading: boolean
   error: string
   onOpenFile: () => void
+  plotLayoutMode: PlotLayoutMode
 }
 
-export function ViewerView({ session, loading, error, onOpenFile }: Props) {
+export function ViewerView({ session, loading, error, onOpenFile, plotLayoutMode }: Props) {
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden">
       {session ? (
-        <LoadedLog key={session.path} session={session} onOpenFile={onOpenFile} loading={loading} />
+        <LoadedLog
+          key={session.path}
+          session={session}
+          onOpenFile={onOpenFile}
+          loading={loading}
+          plotLayoutMode={plotLayoutMode}
+        />
       ) : (
         <div className="grid flex-1 place-items-center">
           <div className="space-y-3 text-center">
@@ -45,10 +53,12 @@ function LoadedLog({
   session,
   loading,
   onOpenFile,
+  plotLayoutMode,
 }: {
   session: Session
   loading: boolean
   onOpenFile: () => void
+  plotLayoutMode: PlotLayoutMode
 }) {
   const [layout, dispatch] = useReducer(layoutReducer, startingPanels(session), makeLayout)
   const activePanel = layout.panels.find((p) => p.id === layout.activeId)
@@ -88,13 +98,16 @@ function LoadedLog({
           dispatch={dispatch}
         />
         <PlotStack
-          layout={layout}
+          panels={layout.panels}
+          mode={plotLayoutMode}
           dispatch={dispatch}
-          renderPanel={(panel, i, context) => (
+          renderPanel={(panel, i) => (
             <PlotPanel
               key={panel.id}
               panel={panel}
-              context={context}
+              slotted
+              panels={layout.panels}
+              layoutMode={plotLayoutMode}
               index={i}
               active={panel.id === layout.activeId}
               session={session}

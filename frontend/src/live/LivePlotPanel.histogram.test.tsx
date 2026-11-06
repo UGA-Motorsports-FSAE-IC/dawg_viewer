@@ -26,7 +26,7 @@ it('keeps the histogram header marker on the newest channel value', () => {
   render(
     <LivePlotPanel
       panel={panel}
-      context={{ paired: false, canJoin: false }}
+      layoutMode="full"
       index={0}
       active
       known={new Set(['AFR'])}

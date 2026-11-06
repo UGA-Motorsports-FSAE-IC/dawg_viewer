@@ -3,6 +3,11 @@
 Source: `Dawg_Viewer_Feature_Reference.md` (the `pi-toolbox-analysis` branch, 18 commits, ~14,900 lines).
 This plan covers how to bring each of those features into the current `dev` branch, one at a time.
 
+> **Superseded layout phase:** Phase 0's row-layout proposal was implemented and
+> later removed. The app now keeps the bento panel model and offers the original
+> full-size layout as the default through Settings. Treat the row-layout details
+> below as historical context, not current implementation guidance.
+
 ## 0. Where `dev` is today
 
 `dev` is a much smaller app than the reference branch. It has:

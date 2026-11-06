@@ -1,3 +1,8 @@
+export type BentoSpan = 1 | 2
+import { assignPlotSlots, placePanel } from './plotSlots'
+export type BentoRowSpan = 1 | 2 | 3 | 4
+export type SnapZone = 'left' | 'right' | 'top' | 'bottom'
+
 export const DEFAULT_ROW_HEIGHT = 192
 const MAX_PANEL_STREAMS = 7
 export type GraphType = 'timeSeries' | 'histogram'
@@ -11,29 +16,22 @@ export type GraphConfig =
       frequency?: 'count' | 'percent'
       frequencyMax?: number | null
     }
-export const MIN_ROW_HEIGHT = 120
-export const MAX_ROW_HEIGHT = 1200
-
-export type DropZone = 'top' | 'bottom' | 'left' | 'right' | 'swap'
 
 export interface Panel {
   id: number
   channelIds: string[]
   graph?: GraphConfig
-}
-
-export interface Row {
-  id: number
-  panelIds: number[]
-  height: number
+  slot?: { row: number; col: 0 | 1 }
+  colSpan?: BentoSpan
+  rowSpan?: BentoRowSpan
+  widthPct?: number
+  height?: number
 }
 
 export interface Layout {
   panels: Panel[]
-  rows: Row[]
   activeId: number
   nextId: number
-  nextRowId: number
 }
 
 export type LayoutAction =
@@ -49,73 +47,145 @@ export type LayoutAction =
       panelId: number
       changes: Partial<Extract<GraphConfig, { type: 'histogram' }>>
     }
-  | { type: 'dropPanel'; panelId: number; targetId: number; zone: DropZone }
-  | { type: 'moveRow'; rowId: number; toIndex: number }
-  | { type: 'setRowHeight'; rowId: number; height: number }
-  | { type: 'splitPanel'; panelId: number }
-  | { type: 'joinPanel'; panelId: number }
+  | { type: 'movePanel'; fromId: number; toId: number; snap?: SnapZone }
+  | { type: 'movePanelToIndex'; panelId: number; index: number }
+  | { type: 'placePanel'; panelId: number; row: number; col: 0 | 1 }
+  | { type: 'togglePanelWidth'; panelId: number }
+  | { type: 'togglePanelHeight'; panelId: number }
+  | {
+      type: 'resizePanel'
+      panelId: number
+      colSpan?: BentoSpan
+      rowSpan?: BentoRowSpan
+      widthPct?: number
+      height?: number
+    }
   | { type: 'setLayout'; layout: Layout }
 
-const PLOT_LAYOUT_KEY = 'dawg.live-plots.v2'
-const LEGACY_PLOT_LAYOUT_KEY = 'dawg.live-plots.v1'
-const EDGE_BAND = 0.25
+const PLOT_LAYOUT_KEY = 'dawg.live-plots.v3'
+const BENTO_LAYOUT_KEY = 'dawg.live-plots.v1'
+const ROW_LAYOUT_KEY = 'dawg.live-plots.v2'
 
-type Drag = { kind: 'plot' | 'row'; id: number }
-let currentDrag: Drag | null = null
+let currentPlotDrag: { id: number; index: number } | null = null
 
-export function setPlotDrag(id: number) {
-  currentDrag = { kind: 'plot', id }
+export function setPlotDrag(id: number, index: number) {
+  currentPlotDrag = { id, index }
 }
 
-export function setRowDrag(id: number) {
-  currentDrag = { kind: 'row', id }
-}
-
-export function getDrag(): Drag | null {
-  return currentDrag
+export function getPlotDrag() {
+  return currentPlotDrag
 }
 
 export function clearPlotDrag() {
-  currentDrag = null
-}
-
-export function clampHeight(height: number): number {
-  if (!Number.isFinite(height)) return DEFAULT_ROW_HEIGHT
-  return Math.max(MIN_ROW_HEIGHT, Math.min(MAX_ROW_HEIGHT, Math.round(height)))
+  currentPlotDrag = null
 }
 
 export function makeLayout(panels: string[][]): Layout {
   return {
-    panels: panels.map((channelIds, i) => ({
-      id: i + 1,
-      channelIds: channelIds.slice(0, MAX_PANEL_STREAMS),
-    })),
-    rows: panels.map((_, i) => ({ id: i + 1, panelIds: [i + 1], height: DEFAULT_ROW_HEIGHT })),
+    panels: assignPlotSlots(
+      panels.map((channelIds, i) => ({
+        id: i + 1,
+        channelIds: channelIds.slice(0, MAX_PANEL_STREAMS),
+      })),
+    ),
     activeId: 1,
     nextId: panels.length + 1,
-    nextRowId: panels.length + 1,
   }
 }
 
-export function orderedPanels(layout: Layout): Panel[] {
-  const byId = new Map(layout.panels.map((p) => [p.id, p]))
-  return layout.rows.flatMap((row) => row.panelIds.flatMap((id) => byId.get(id) ?? []))
+export function panelColSpan(panel: Panel, totalPanels = 2): BentoSpan {
+  if (panel.colSpan) return panel.colSpan
+  if (panel.widthPct !== undefined) return panel.widthPct > 75 ? 2 : 1
+  return totalPanels === 1 ? 2 : 1
 }
 
-export function joinTarget(rows: Row[], panelId: number): number | undefined {
-  const at = rows.findIndex((r) => r.panelIds.includes(panelId))
-  if (at < 0 || rows[at].panelIds.length !== 1) return undefined
-  if (at > 0 && rows[at - 1].panelIds.length === 1) return rows[at - 1].id
-  if (at < rows.length - 1 && rows[at + 1].panelIds.length === 1) return rows[at + 1].id
-  return undefined
+export function panelWidthPct(panel: Panel, totalPanels = 2): number {
+  if (panel.widthPct !== undefined) return panel.widthPct
+  return panelColSpan(panel, totalPanels) === 2 ? 100 : 50
 }
 
-export function detectDropZone(rx: number, ry: number): DropZone {
-  const dx = Math.min(rx, 1 - rx)
-  const dy = Math.min(ry, 1 - ry)
-  if (dx >= EDGE_BAND && dy >= EDGE_BAND) return 'swap'
-  if (dy <= dx) return ry < 0.5 ? 'top' : 'bottom'
-  return rx < 0.5 ? 'left' : 'right'
+export function panelRowSpan(panel: Panel): BentoRowSpan {
+  return panel.rowSpan ?? 1
+}
+
+export function panelHeightPx(panel: Panel): number | undefined {
+  return panel.height
+}
+
+export interface EdgeResizeResult {
+  colSpan?: BentoSpan
+  rowSpan?: BentoRowSpan
+  widthPct?: number
+  height?: number
+}
+
+export function computeEdgeResize(
+  edge: 'left' | 'right' | 'bottom' | 'corner',
+  dx: number,
+  dy: number,
+  startCol: BentoSpan,
+  startRow: BentoRowSpan,
+  opts?: {
+    startWidthPct?: number
+    startHeightPx?: number
+    containerWidthPx?: number
+  },
+): EdgeResizeResult {
+  const result: EdgeResizeResult = {}
+  const containerW =
+    opts?.containerWidthPx && opts.containerWidthPx > 0 ? opts.containerWidthPx : 160
+  const startPct = opts?.startWidthPct ?? (startCol === 2 ? 100 : 50)
+
+  if (edge === 'right' || edge === 'left' || edge === 'corner') {
+    const hDelta = edge === 'left' ? -dx : dx
+    const deltaPct = (hDelta / containerW) * 100
+    const nextPct = Math.max(20, Math.min(100, Number((startPct + deltaPct).toFixed(2))))
+    result.widthPct = nextPct
+    result.colSpan = nextPct > 75 ? 2 : 1
+  }
+
+  if (edge === 'bottom' || edge === 'corner') {
+    const startH =
+      opts?.startHeightPx && opts.startHeightPx > 0
+        ? opts.startHeightPx
+        : startRow * DEFAULT_ROW_HEIGHT
+    const nextH = Math.max(120, Math.round(startH + dy))
+    result.height = nextH
+    if (dy >= 30) {
+      const addRows = Math.max(1, Math.floor(dy / 160))
+      result.rowSpan = Math.min(4, startRow + addRows) as BentoRowSpan
+    } else if (dy <= -30) {
+      const subRows = Math.max(1, Math.floor(Math.abs(dy) / 160))
+      result.rowSpan = Math.max(1, startRow - subRows) as BentoRowSpan
+    } else {
+      result.rowSpan = startRow
+    }
+  }
+
+  return result
+}
+
+export function detectSnapZone(
+  clientX: number,
+  clientY: number,
+  rect: { left: number; top: number; width: number; height: number },
+  sourceIndex: number,
+  targetIndex: number,
+): SnapZone {
+  if (rect.width <= 0 || rect.height <= 0) {
+    return sourceIndex < targetIndex ? 'right' : 'left'
+  }
+  const rx = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+  const ry = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+  const distLeft = rx
+  const distRight = 1 - rx
+  const distTop = ry
+  const distBottom = 1 - ry
+  const min = Math.min(distLeft, distRight, distTop, distBottom)
+  if (min === distLeft) return 'left'
+  if (min === distRight) return 'right'
+  if (min === distTop) return 'top'
+  return 'bottom'
 }
 
 function updatePanel(layout: Layout, panelId: number, fn: (ids: string[]) => string[]): Layout {
@@ -127,53 +197,49 @@ function updatePanel(layout: Layout, panelId: number, fn: (ids: string[]) => str
   }
 }
 
-function withoutPanel(rows: Row[], panelId: number): Row[] {
-  return rows
-    .map((r) =>
-      r.panelIds.includes(panelId)
-        ? { ...r, panelIds: r.panelIds.filter((id) => id !== panelId) }
-        : r,
-    )
-    .filter((r) => r.panelIds.length > 0)
+export function movePanels(
+  panels: Panel[],
+  fromId: number,
+  toId: number,
+  snap?: SnapZone,
+): Panel[] {
+  const sourceIndex = panels.findIndex((p) => p.id === fromId)
+  const targetIndex = panels.findIndex((p) => p.id === toId)
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return panels
+
+  const next = [...panels]
+  const [moved] = next.splice(sourceIndex, 1)
+
+  if (!snap) {
+    next.splice(targetIndex, 0, moved)
+    return next
+  }
+
+  const newTargetIndex = next.findIndex((p) => p.id === toId)
+  const insertAt = snap === 'left' || snap === 'top' ? newTargetIndex : newTargetIndex + 1
+  const snappedMoved: Panel =
+    snap === 'left' || snap === 'right' ? { ...moved, colSpan: 1, widthPct: 50 } : moved
+  next.splice(insertAt, 0, snappedMoved)
+
+  if (snap === 'left' || snap === 'right') {
+    return next.map((p) => (p.id === toId ? { ...p, colSpan: 1, widthPct: 50 } : p))
+  }
+  return next
 }
 
-function rowIndexOf(rows: Row[], panelId: number): number {
-  return rows.findIndex((r) => r.panelIds.includes(panelId))
-}
-
-function dropPanel(layout: Layout, panelId: number, targetId: number, zone: DropZone): Layout {
-  if (panelId === targetId) return layout
-  const sourceRow = layout.rows[rowIndexOf(layout.rows, panelId)]
-  const targetRow = layout.rows[rowIndexOf(layout.rows, targetId)]
-  if (!sourceRow || !targetRow) return layout
-
+export function movePanelToIndex(panels: Panel[], panelId: number, index: number): Panel[] {
+  const source = panels.findIndex((panel) => panel.id === panelId)
   if (
-    zone === 'swap' ||
-    ((zone === 'left' || zone === 'right') && targetRow.panelIds.length === 2)
-  ) {
-    const rows = layout.rows.map((r) => ({
-      ...r,
-      panelIds: r.panelIds.map((id) =>
-        id === panelId ? targetId : id === targetId ? panelId : id,
-      ),
-    }))
-    return { ...layout, rows }
-  }
-
-  const remaining = withoutPanel(layout.rows, panelId)
-  const at = rowIndexOf(remaining, targetId)
-  if (zone === 'left' || zone === 'right') {
-    const rows = remaining.map((r, i) =>
-      i === at
-        ? { ...r, panelIds: zone === 'left' ? [panelId, targetId] : [targetId, panelId] }
-        : r,
-    )
-    return { ...layout, rows }
-  }
-  const row: Row = { id: layout.nextRowId, panelIds: [panelId], height: sourceRow.height }
-  const rows = [...remaining]
-  rows.splice(zone === 'top' ? at : at + 1, 0, row)
-  return { ...layout, rows, nextRowId: layout.nextRowId + 1 }
+    source < 0 ||
+    !Number.isInteger(index) ||
+    index < 0 ||
+    index >= panels.length ||
+    source === index
+  )
+    return panels
+  const next = [...panels]
+  next.splice(index, 0, ...next.splice(source, 1))
+  return next
 }
 
 export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
@@ -255,93 +321,86 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
       )
     case 'addPanel':
       return {
-        panels: [...layout.panels, { id: layout.nextId, channelIds: [] }],
-        rows: [
-          ...layout.rows,
-          { id: layout.nextRowId, panelIds: [layout.nextId], height: DEFAULT_ROW_HEIGHT },
-        ],
+        panels: assignPlotSlots([...layout.panels, { id: layout.nextId, channelIds: [] }]),
         activeId: layout.nextId,
         nextId: layout.nextId + 1,
-        nextRowId: layout.nextRowId + 1,
       }
     case 'removePanel': {
       if (layout.panels.length === 1) return updatePanel(layout, action.panelId, () => [])
-      if (!layout.panels.some((p) => p.id === action.panelId)) return layout
-      const next: Layout = {
-        ...layout,
-        panels: layout.panels.filter((p) => p.id !== action.panelId),
-        rows: withoutPanel(layout.rows, action.panelId),
-      }
-      const activeId =
-        layout.activeId === action.panelId ? orderedPanels(next)[0].id : layout.activeId
-      return { ...next, activeId }
+      const remaining = layout.panels.filter((p) => p.id !== action.panelId)
+      const panels = assignPlotSlots(
+        remaining.length === 1 ? [{ ...remaining[0], slot: undefined }] : remaining,
+      )
+      const activeId = layout.activeId === action.panelId ? panels[0].id : layout.activeId
+      return { ...layout, panels, activeId }
     }
     case 'setActive':
       return layout.activeId === action.panelId ? layout : { ...layout, activeId: action.panelId }
-    case 'dropPanel':
-      return dropPanel(layout, action.panelId, action.targetId, action.zone)
-    case 'moveRow': {
-      const from = layout.rows.findIndex((r) => r.id === action.rowId)
-      if (
-        from < 0 ||
-        !Number.isInteger(action.toIndex) ||
-        action.toIndex < 0 ||
-        action.toIndex >= layout.rows.length ||
-        from === action.toIndex
-      )
-        return layout
-      const rows = [...layout.rows]
-      rows.splice(action.toIndex, 0, ...rows.splice(from, 1))
-      return { ...layout, rows }
+    case 'movePanel': {
+      const panels = movePanels(layout.panels, action.fromId, action.toId, action.snap)
+      return panels === layout.panels ? layout : { ...layout, panels }
     }
-    case 'setRowHeight': {
-      const height = clampHeight(action.height)
-      const row = layout.rows.find((r) => r.id === action.rowId)
-      if (!row || row.height === height) return layout
+    case 'movePanelToIndex': {
+      const panels = movePanelToIndex(layout.panels, action.panelId, action.index)
+      return panels === layout.panels ? layout : { ...layout, panels }
+    }
+    case 'placePanel': {
+      const panels = placePanel(layout.panels, action.panelId, action.row, action.col)
+      return panels === layout.panels ? layout : { ...layout, panels }
+    }
+    case 'togglePanelWidth':
       return {
         ...layout,
-        rows: layout.rows.map((r) => (r.id === action.rowId ? { ...r, height } : r)),
+        panels: assignPlotSlots(
+          layout.panels.map((p) => {
+            if (p.id !== action.panelId) return p
+            const nextSpan: BentoSpan = (p.colSpan ?? 1) === 2 ? 1 : 2
+            return {
+              ...p,
+              colSpan: nextSpan,
+              widthPct: nextSpan === 2 ? 100 : 50,
+            }
+          }),
+        ),
       }
-    }
-    case 'splitPanel': {
-      const at = rowIndexOf(layout.rows, action.panelId)
-      if (at < 0 || layout.rows[at].panelIds.length !== 2) return layout
-      const row = layout.rows[at]
-      const rows = [...layout.rows]
-      rows[at] = { ...row, panelIds: row.panelIds.filter((id) => id !== action.panelId) }
-      rows.splice(at + 1, 0, {
-        id: layout.nextRowId,
-        panelIds: [action.panelId],
-        height: row.height,
-      })
-      return { ...layout, rows, nextRowId: layout.nextRowId + 1 }
-    }
-    case 'joinPanel': {
-      const partnerId = joinTarget(layout.rows, action.panelId)
-      if (partnerId === undefined) return layout
-      const own = layout.rows[rowIndexOf(layout.rows, action.panelId)]
-      const partner = layout.rows.find((r) => r.id === partnerId)!
-      const before = layout.rows.indexOf(partner) < layout.rows.indexOf(own)
-      const rows = layout.rows
-        .filter((r) => r.id !== own.id)
-        .map((r) =>
-          r.id === partnerId
-            ? {
-                ...r,
-                panelIds: before
-                  ? [...r.panelIds, action.panelId]
-                  : [action.panelId, ...r.panelIds],
-              }
-            : r,
-        )
-      return { ...layout, rows }
-    }
+    case 'togglePanelHeight':
+      return {
+        ...layout,
+        panels: assignPlotSlots(
+          layout.panels.map((p) => {
+            if (p.id !== action.panelId) return p
+            const nextRow: BentoRowSpan = (p.rowSpan ?? 1) >= 2 ? 1 : 2
+            return {
+              ...p,
+              rowSpan: nextRow,
+              height: nextRow * DEFAULT_ROW_HEIGHT,
+            }
+          }),
+        ),
+      }
+    case 'resizePanel':
+      return {
+        ...layout,
+        panels: assignPlotSlots(
+          layout.panels.map((p) =>
+            p.id === action.panelId
+              ? {
+                  ...p,
+                  colSpan: action.colSpan ?? p.colSpan,
+                  rowSpan: action.rowSpan ?? p.rowSpan,
+                  widthPct: action.widthPct ?? p.widthPct,
+                  height: action.height ?? p.height,
+                }
+              : p,
+          ),
+        ),
+      }
     case 'setLayout':
       return action.layout
   }
 }
 
-function readStore(key: string): Record<string, unknown> {
+function readLayouts(key: string): Record<string, unknown> {
   try {
     const saved: unknown = JSON.parse(localStorage.getItem(key) ?? '{}')
     return saved && typeof saved === 'object' && !Array.isArray(saved)
@@ -352,197 +411,151 @@ function readStore(key: string): Record<string, unknown> {
   }
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null
-}
-
-function parseGraph(value: unknown): GraphConfig | undefined {
-  const graph = asRecord(value)
-  if (!graph) return undefined
-  if (graph.type === 'timeSeries') return { type: 'timeSeries' }
-  if (graph.type !== 'histogram') return undefined
-  const range = asRecord(graph.valueRange)
-  const valueRange =
-    range &&
-    typeof range.min === 'number' &&
-    Number.isFinite(range.min) &&
-    typeof range.max === 'number' &&
-    Number.isFinite(range.max) &&
-    range.min < range.max
-      ? { min: range.min, max: range.max }
-      : null
-  return {
-    type: 'histogram',
-    bins:
-      typeof graph.bins === 'number' &&
-      Number.isInteger(graph.bins) &&
-      graph.bins >= 5 &&
-      graph.bins <= 200
-        ? graph.bins
-        : 30,
-    valueRange,
-    orientation: graph.orientation === 'horizontal' ? 'horizontal' : 'vertical',
-    frequency: graph.frequency === 'percent' ? 'percent' : 'count',
-    frequencyMax:
-      typeof graph.frequencyMax === 'number' &&
-      Number.isFinite(graph.frequencyMax) &&
-      graph.frequencyMax > 0
-        ? graph.frequencyMax
-        : null,
-  }
-}
-
-function parseLayout(entry: unknown): Layout | null {
-  const raw = asRecord(entry)
-  if (!raw || !Array.isArray(raw.panels) || !Array.isArray(raw.rows)) return null
-  if (raw.panels.length === 0 || raw.rows.length === 0) return null
-  const ids = new Set<number>()
-  const panels: Panel[] = []
-  for (const item of raw.panels) {
-    const p = asRecord(item)
-    if (
-      !p ||
-      typeof p.id !== 'number' ||
-      ids.has(p.id) ||
-      !Array.isArray(p.channelIds) ||
-      !p.channelIds.every((c) => typeof c === 'string')
-    )
-      return null
-    ids.add(p.id)
-    const graph = parseGraph(p.graph)
-    panels.push({
-      id: p.id,
-      channelIds: (p.channelIds as string[]).slice(
-        0,
-        graph?.type === 'histogram' ? 1 : MAX_PANEL_STREAMS,
-      ),
-      ...(graph ? { graph } : {}),
-    })
-  }
-  const placed = new Set<number>()
-  const rowIds = new Set<number>()
-  const rows: Row[] = []
-  for (const item of raw.rows) {
-    const r = asRecord(item)
-    if (
-      !r ||
-      typeof r.id !== 'number' ||
-      rowIds.has(r.id) ||
-      !Array.isArray(r.panelIds) ||
-      r.panelIds.length < 1 ||
-      r.panelIds.length > 2 ||
-      typeof r.height !== 'number'
-    )
-      return null
-    for (const id of r.panelIds) {
-      if (typeof id !== 'number' || !ids.has(id) || placed.has(id)) return null
-      placed.add(id)
+function migrateRowLayout(entry: unknown): unknown {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry
+  const raw = entry as Record<string, unknown>
+  if (!Array.isArray(raw.panels) || !Array.isArray(raw.rows)) return entry
+  const byId = new Map<number, Record<string, unknown>>()
+  for (const value of raw.panels) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const panel = value as Record<string, unknown>
+      if (typeof panel.id === 'number') byId.set(panel.id, panel)
     }
-    rowIds.add(r.id)
-    rows.push({ id: r.id, panelIds: r.panelIds as number[], height: clampHeight(r.height) })
   }
-  if (placed.size !== panels.length) return null
-  const activeId =
-    typeof raw.activeId === 'number' && ids.has(raw.activeId) ? raw.activeId : panels[0].id
-  const maxId = Math.max(...ids)
-  const maxRow = Math.max(...rowIds)
-  return {
-    panels,
-    rows,
-    activeId,
-    nextId: typeof raw.nextId === 'number' && raw.nextId > maxId ? raw.nextId : maxId + 1,
-    nextRowId:
-      typeof raw.nextRowId === 'number' && raw.nextRowId > maxRow ? raw.nextRowId : maxRow + 1,
-  }
-}
-
-export function migrateLegacyLayout(entry: unknown): Layout | null {
-  const raw = asRecord(entry)
-  if (!raw || !Array.isArray(raw.panels) || raw.panels.length === 0) return null
-  const items: {
-    id: number
-    channelIds: string[]
-    graph?: GraphConfig
-    row: number
-    col: number
-    wide: boolean
-    height: number
-  }[] = []
-  const ids = new Set<number>()
-  for (const [order, item] of raw.panels.entries()) {
-    const p = asRecord(item)
-    if (
-      !p ||
-      typeof p.id !== 'number' ||
-      ids.has(p.id) ||
-      !Array.isArray(p.channelIds) ||
-      !p.channelIds.every((c) => typeof c === 'string')
-    )
-      return null
-    ids.add(p.id)
-    const slot = asRecord(p.slot)
-    const rowSpan = typeof p.rowSpan === 'number' ? p.rowSpan : 1
-    const graph = parseGraph(p.graph)
-    items.push({
-      id: p.id,
-      channelIds: (p.channelIds as string[]).slice(
-        0,
-        graph?.type === 'histogram' ? 1 : MAX_PANEL_STREAMS,
-      ),
-      ...(graph ? { graph } : {}),
-      row: slot && typeof slot.row === 'number' ? slot.row : order,
-      col: slot && typeof slot.col === 'number' ? slot.col : 0,
-      wide: p.colSpan === 2 || (typeof p.widthPct === 'number' && p.widthPct > 75),
-      height: clampHeight(typeof p.height === 'number' ? p.height : rowSpan * DEFAULT_ROW_HEIGHT),
-    })
-  }
-  items.sort((a, b) => a.row - b.row || a.col - b.col)
-  const rows: Row[] = []
-  for (let i = 0; i < items.length; i++) {
-    const a = items[i]
-    const b = items[i + 1]
-    if (!a.wide && b && !b.wide && b.row === a.row) {
-      rows.push({
-        id: rows.length + 1,
-        panelIds: [a.id, b.id],
-        height: Math.max(a.height, b.height),
+  const panels: Record<string, unknown>[] = []
+  raw.rows.forEach((value, row) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return
+    const source = value as Record<string, unknown>
+    if (!Array.isArray(source.panelIds)) return
+    const panelIds = source.panelIds
+    panelIds.forEach((id, col) => {
+      if (typeof id !== 'number' || col > 1) return
+      const panel = byId.get(id)
+      if (!panel) return
+      const paired = panelIds.length > 1
+      const height =
+        typeof source.height === 'number'
+          ? Math.max(120, Math.min(1200, source.height))
+          : DEFAULT_ROW_HEIGHT
+      panels.push({
+        ...panel,
+        slot: { row, col },
+        colSpan: paired ? 1 : 2,
+        widthPct: paired ? 50 : 100,
+        height,
+        rowSpan: Math.max(1, Math.min(4, Math.round(height / DEFAULT_ROW_HEIGHT))),
       })
-      i++
-    } else {
-      rows.push({ id: rows.length + 1, panelIds: [a.id], height: a.height })
+    })
+  })
+  return panels.length === byId.size ? { ...raw, panels } : entry
+}
+
+function parseLayout(entry: unknown, fallback: Layout): Layout {
+  try {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return fallback
+    const raw = entry as Record<string, unknown>
+    if (!Array.isArray(raw.panels) || raw.panels.length === 0) return fallback
+    const ids = new Set<number>()
+    const panels: Panel[] = []
+    for (const item of raw.panels) {
+      if (!item || typeof item !== 'object') return fallback
+      const p = item as Record<string, unknown>
+      if (
+        typeof p.id !== 'number' ||
+        ids.has(p.id) ||
+        !Array.isArray(p.channelIds) ||
+        !p.channelIds.every((c) => typeof c === 'string')
+      )
+        return fallback
+      if (p.colSpan !== undefined && p.colSpan !== 1 && p.colSpan !== 2) return fallback
+      if (
+        p.rowSpan !== undefined &&
+        p.rowSpan !== 1 &&
+        p.rowSpan !== 2 &&
+        p.rowSpan !== 3 &&
+        p.rowSpan !== 4
+      )
+        return fallback
+      ids.add(p.id)
+      const panel: Panel = {
+        id: p.id,
+        channelIds: (p.channelIds as string[]).slice(0, MAX_PANEL_STREAMS),
+      }
+      if (p.graph && typeof p.graph === 'object' && !Array.isArray(p.graph)) {
+        const graph = p.graph as Record<string, unknown>
+        if (graph.type === 'histogram') {
+          panel.graph = {
+            type: 'histogram',
+            bins:
+              Number.isInteger(graph.bins) &&
+              (graph.bins as number) >= 5 &&
+              (graph.bins as number) <= 200
+                ? (graph.bins as number)
+                : 30,
+            valueRange:
+              graph.valueRange &&
+              typeof graph.valueRange === 'object' &&
+              Number.isFinite((graph.valueRange as { min: number }).min) &&
+              Number.isFinite((graph.valueRange as { max: number }).max) &&
+              (graph.valueRange as { min: number }).min < (graph.valueRange as { max: number }).max
+                ? (graph.valueRange as { min: number; max: number })
+                : null,
+            orientation: graph.orientation === 'horizontal' ? 'horizontal' : 'vertical',
+            frequency: graph.frequency === 'percent' ? 'percent' : 'count',
+            frequencyMax:
+              typeof graph.frequencyMax === 'number' &&
+              Number.isFinite(graph.frequencyMax) &&
+              graph.frequencyMax > 0
+                ? graph.frequencyMax
+                : null,
+          }
+          panel.channelIds = panel.channelIds.slice(0, 1)
+        } else if (graph.type === 'timeSeries') panel.graph = { type: 'timeSeries' }
+      }
+      if (p.slot !== undefined) {
+        if (!p.slot || typeof p.slot !== 'object' || Array.isArray(p.slot)) return fallback
+        const slot = p.slot as Record<string, unknown>
+        if (
+          !Number.isInteger(slot.row) ||
+          (slot.row as number) < 0 ||
+          (slot.col !== 0 && slot.col !== 1)
+        )
+          return fallback
+        panel.slot = { row: slot.row as number, col: slot.col as 0 | 1 }
+      }
+      if (p.colSpan) panel.colSpan = p.colSpan
+      if (p.rowSpan) panel.rowSpan = p.rowSpan
+      if (typeof p.widthPct === 'number' && p.widthPct >= 20 && p.widthPct <= 100) {
+        panel.widthPct = p.widthPct
+      }
+      if (typeof p.height === 'number' && p.height >= 120 && p.height <= 1200) {
+        panel.height = p.height
+      }
+      panels.push(panel)
     }
-  }
-  const maxId = Math.max(...ids)
-  const activeId =
-    typeof raw.activeId === 'number' && ids.has(raw.activeId) ? raw.activeId : items[0].id
-  return {
-    panels: items.map((i) => ({
-      id: i.id,
-      channelIds: i.channelIds,
-      ...(i.graph ? { graph: i.graph } : {}),
-    })),
-    rows,
-    activeId,
-    nextId: typeof raw.nextId === 'number' && raw.nextId > maxId ? raw.nextId : maxId + 1,
-    nextRowId: rows.length + 1,
+    const maxId = Math.max(...panels.map((p) => p.id))
+    const activeId =
+      typeof raw.activeId === 'number' && ids.has(raw.activeId) ? raw.activeId : panels[0].id
+    const nextId = typeof raw.nextId === 'number' && raw.nextId > maxId ? raw.nextId : maxId + 1
+    return { panels: assignPlotSlots(panels), activeId, nextId }
+  } catch {
+    return fallback
   }
 }
 
 export function loadPlotLayout(profile: string, fallback: Layout): Layout {
-  const current = readStore(PLOT_LAYOUT_KEY)
-  if (profile in current) return parseLayout(current[profile]) ?? fallback
-  const legacy = readStore(LEGACY_PLOT_LAYOUT_KEY)
-  return (profile in legacy ? migrateLegacyLayout(legacy[profile]) : null) ?? fallback
+  const current = readLayouts(PLOT_LAYOUT_KEY)
+  if (profile in current) return parseLayout(current[profile], fallback)
+  const rows = readLayouts(ROW_LAYOUT_KEY)
+  if (profile in rows) return parseLayout(migrateRowLayout(rows[profile]), fallback)
+  const bento = readLayouts(BENTO_LAYOUT_KEY)
+  return profile in bento ? parseLayout(bento[profile], fallback) : fallback
 }
 
 export function savePlotLayout(profile: string, layout: Layout) {
   try {
-    localStorage.setItem(
-      PLOT_LAYOUT_KEY,
-      JSON.stringify({ ...readStore(PLOT_LAYOUT_KEY), [profile]: layout }),
-    )
+    const layouts = readLayouts(PLOT_LAYOUT_KEY)
+    localStorage.setItem(PLOT_LAYOUT_KEY, JSON.stringify({ ...layouts, [profile]: layout }))
   } catch {
     return
   }

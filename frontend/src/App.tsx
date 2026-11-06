@@ -4,14 +4,17 @@ import { useInfo } from './live/connection'
 import { openLog, pickAndOpenLog } from './viewer/openLog'
 import { LiveView } from './views/LiveView'
 import { LogsView } from './views/LogsView'
+import { SettingsView } from './views/SettingsView'
 import { ViewerView } from './views/ViewerView'
+import { loadPlotLayoutMode, savePlotLayoutMode, type PlotLayoutMode } from './settings/plotLayout'
 
-type Tab = 'live' | 'logs' | 'viewer'
+type Tab = 'live' | 'logs' | 'viewer' | 'settings'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'live', label: 'Live' },
   { id: 'logs', label: 'Logs' },
   { id: 'viewer', label: 'Viewer' },
+  { id: 'settings', label: 'Settings' },
 ]
 
 function App() {
@@ -20,6 +23,12 @@ function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [plotLayoutMode, setPlotLayoutMode] = useState(loadPlotLayoutMode)
+
+  const updatePlotLayoutMode = (mode: PlotLayoutMode) => {
+    setPlotLayoutMode(mode)
+    savePlotLayoutMode(mode)
+  }
 
   const load = async (open: () => Promise<Session | null>) => {
     setLoading(true)
@@ -59,7 +68,7 @@ function App() {
         {version && <span className="ml-auto text-xs text-zinc-600">v{version}</span>}
       </nav>
       <div className={`min-h-0 flex-1 ${tab === 'live' ? '' : 'hidden'}`}>
-        <LiveView />
+        <LiveView plotLayoutMode={plotLayoutMode} />
       </div>
       {tab === 'logs' && (
         <div className="min-h-0 flex-1">
@@ -72,8 +81,14 @@ function App() {
           loading={loading}
           error={error}
           onOpenFile={() => load(pickAndOpenLog)}
+          plotLayoutMode={plotLayoutMode}
         />
       </div>
+      {tab === 'settings' && (
+        <div className="min-h-0 flex-1">
+          <SettingsView plotLayoutMode={plotLayoutMode} onPlotLayoutMode={updatePlotLayoutMode} />
+        </div>
+      )}
     </div>
   )
 }

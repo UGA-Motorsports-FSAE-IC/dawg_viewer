@@ -57,7 +57,7 @@ it('adds a stream in card edit mode and saves when clicking outside', async () =
   expect(screen.getByRole('button', { name: 'VSS' })).toHaveAttribute('aria-pressed', 'false')
 })
 
-it('searches to add any data point to the top and keeps plots in simple rows', async () => {
+it('searches to add any data point and defaults to the original full-size plots', async () => {
   const user = userEvent.setup()
   render(<LiveView />)
 
@@ -69,9 +69,12 @@ it('searches to add any data point to the top and keeps plots in simple rows', a
   expect(screen.queryByRole('button', { name: /width|height/i })).not.toBeInTheDocument()
   expect(screen.queryByLabelText(/Drag (left|right) edge/)).not.toBeInTheDocument()
 
-  await user.click(screen.getByRole('button', { name: 'Put plot 2 side by side' }))
-  expect(screen.getByLabelText('Plot 1').closest('[data-row-id]')).toBe(
-    screen.getByLabelText('Plot 2').closest('[data-row-id]'),
-  )
-  expect(screen.getByRole('button', { name: 'Put plot 2 on its own row' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /side by side|own row/i })).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Plot 1')).toHaveClass('w-full')
+})
+
+it('shows bento controls only in bento mode', () => {
+  render(<LiveView plotLayoutMode="bento" />)
+  expect(screen.getByRole('button', { name: 'Toggle plot 1 width' })).toBeInTheDocument()
+  expect(screen.getByLabelText('Drag left edge of plot 1')).toBeInTheDocument()
 })

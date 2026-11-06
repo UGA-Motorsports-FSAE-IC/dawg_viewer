@@ -98,20 +98,20 @@ widget (`ageColor` in `live/format.ts`).
 
 ## Layout (state/layout.ts)
 
-A reducer for the list of plot panels and which one is active. Panels have
-saved grid slots as well as width and height spans. `PlotStack` and
-`plotSlots.ts` render the two-column bento grid, preview drag destinations,
-move panels into empty space, swap occupied slots, and shift stacked panels
-when a tall panel is placed. Plot headers can be dragged, and edge/corner
-handles resize panels. Untouched panels keep their object identity so
-memoised plots don't rebuild. Removing the last panel empties it instead, so
-there's always one.
+A reducer owns the list of plot panels and which one is active. Full-size mode
+is the default and renders the panels sequentially using the original layout.
+The Settings tab can switch both Live and Viewer to bento mode. In that mode,
+panels use saved grid slots, width spans and height spans. `PlotStack` and
+`plotSlots.ts` preview drag destinations, move panels into empty space, swap
+occupied slots, and shift stacked panels when a tall panel is placed. Edge and
+corner handles resize bento panels. Removing the last panel empties it instead,
+so there is always one.
 
-Layouts are stored in browser local storage under `dawg.live-plots.v1`, keyed
-by device profile. Loading validates saved panel ids, slots and dimensions;
-invalid or older layouts fall back to the default layout and are normalized
-into valid grid slots. This is per-profile persistence, not a named preset
-system.
+Layouts are stored under `dawg.live-plots.v3`, keyed by device profile. The
+loader migrates both the older bento v1 data and row-based v2 data while
+preserving panel channels and graph settings. The global rendering preference
+is stored separately under `dawg.plot-layout-mode.v1`; missing or invalid
+values select full-size mode.
 
 Right-clicking the graph body opens the graph type menu. A histogram keeps the
 first selected channel when converted from a multi-channel time series; new

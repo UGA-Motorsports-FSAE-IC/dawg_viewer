@@ -7,7 +7,8 @@ Done:
   - [x] live data view.
   - [x] log/csv download.
   - [x] csv data viewer.
-  - [x] editable, per-device bento plot layouts.
+  - [x] original full-size plots with an optional editable bento layout.
+  - [x] persistent plot-layout preference in the Settings tab.
 
 Todo:
   - [ ] additional layout presets

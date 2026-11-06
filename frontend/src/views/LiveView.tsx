@@ -10,6 +10,7 @@ import { StatusHeader } from '../live/StatusHeader'
 import { liveSync, resumeFollow, showWindow, useFollow } from '../live/follow'
 import { layoutReducer, loadPlotLayout, makeLayout, savePlotLayout } from '../state/layout'
 import { toolbarButton, toolbarButtonActive } from '../ui'
+import type { PlotLayoutMode } from '../settings/plotLayout'
 
 const initialLayout = makeLayout([
   ['RPM', 'TPS1'],
@@ -28,7 +29,7 @@ const WINDOWS: [number, string][] = [
 const NO_CHANNELS: string[] = []
 const NO_METAS: Record<string, ChannelMeta | undefined> = {}
 
-export function LiveView() {
+export function LiveView({ plotLayoutMode = 'full' }: { plotLayoutMode?: PlotLayoutMode }) {
   useEffect(startLive, [])
   const info = useInfo()
   const channels = useChannels()
@@ -166,13 +167,16 @@ export function LiveView() {
             </button>
           </div>
           <PlotStack
-            layout={layout}
+            panels={layout.panels}
+            mode={plotLayoutMode}
             dispatch={dispatch}
-            renderPanel={(panel, i, context) => (
+            renderPanel={(panel, i) => (
               <LivePlotPanel
                 key={panel.id}
                 panel={panel}
-                context={context}
+                slotted
+                panels={layout.panels}
+                layoutMode={plotLayoutMode}
                 index={i}
                 active={panel.id === layout.activeId}
                 known={known}
