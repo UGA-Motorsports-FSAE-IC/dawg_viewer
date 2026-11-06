@@ -4,7 +4,17 @@ import userEvent from '@testing-library/user-event'
 import { openLog } from './viewer/openLog'
 import App from './App'
 
-vi.mock('./live/connection', () => ({ useInfo: () => null }))
+vi.mock('./live/connection', () => ({
+  useInfo: () => null,
+  setLiveShown: () => {},
+  useTestMode: () => false,
+}))
+vi.mock('./testmode/testMode', () => ({
+  startTestMode: vi.fn(),
+  stopTestMode: vi.fn(),
+  testSession: vi.fn(),
+  TEST_LOG_PATH: 'test',
+}))
 vi.mock('./viewer/openLog', () => ({ openLog: vi.fn(), pickAndOpenLog: vi.fn() }))
 vi.mock('./views/LiveView', () => ({ LiveView: () => <div>Live dashboard</div> }))
 vi.mock('./views/LogsView', () => ({

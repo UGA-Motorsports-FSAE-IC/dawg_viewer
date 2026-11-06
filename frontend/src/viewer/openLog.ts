@@ -15,6 +15,15 @@ export async function openLog(path: string): Promise<Session> {
     throw new Error(`The data for ${log.name} arrived incomplete`)
   }
 
+  return sessionFromColumns(buf, rows, channelsIn, log)
+}
+
+export function sessionFromColumns(
+  buf: ArrayBuffer,
+  rows: number,
+  channelsIn: { name: string; unit: string }[],
+  log: { name: string; path: string; source: string; note: string },
+): Session {
   const metas = info.get()?.channels ?? {}
   const time = new Float64Array(buf, 0, rows)
   const channels: Channel[] = channelsIn.map((c, i) => ({
@@ -30,6 +39,7 @@ export async function openLog(path: string): Promise<Session> {
   return {
     name: log.name,
     path: log.path,
+    source: log.source,
     note: log.note,
     sampleRate: duration > 0 ? Math.round((rows - 1) / duration) : 0,
     time,

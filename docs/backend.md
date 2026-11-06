@@ -299,3 +299,18 @@ Pretends to be the ILTM so the app can be tested without the car:
 Signal ids and names follow the ILTM's vehicle config. Ids 111 and 113 copy
 the firmware's naming mistake (`PosLat_L`) so the app's rename fix gets
 exercised. `RadTemp` is sent as raw ADC counts so the calibration is used.
+
+## Editing profiles (internal/config/edit.go)
+
+`SaveChannel` and `SaveCar` edit a profile as text rather than decoding and
+re-encoding it, because re-encoding would drop the comments and the aligned
+hand formatting the shipped profiles rely on. They find the top-level
+section, then the entry by key (decoded with YAML so quoted keys match),
+replace or insert one line, and decode the result with `KnownFields` before
+writing it atomically (temp file + rename). `LiveService.SaveChannel` and
+`SaveCar` then reload the profiles and pass the new calibrations to the
+running session, which swaps its converters inside the hub goroutine.
+
+`ViewerLog.Source` says whether a log was a `.bin`, a long CSV (both get the
+profile's calibrations when loaded) or a wide CSV (loaded as it is). The
+Viewer uses it to decide how to apply a calibration saved while a log is open.

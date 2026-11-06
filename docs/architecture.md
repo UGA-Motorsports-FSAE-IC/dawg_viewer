@@ -38,15 +38,18 @@ From wire to screen, data takes these shapes:
 
    ```go
    type Row struct {
-       T float64            // seconds since the session started, laptop clock
+       T float64            // seconds since the session started (see timing below)
        V map[string]float64 // channel name → value, only channels this packet carried
    }
    ```
 
-   One packet becomes exactly one row. `T` is when the laptop received it;
-   the device's own clock is kept as the `Time_tx` channel. Rows are sparse.
+   One packet becomes exactly one row. When the packet carries the device's
+   clock (`Time_tx`), `T` is that time mapped onto the session's clock;
+   otherwise `T` is when the laptop received it. The status says which
+   ("timing": `device` or `arrival`). Rows are sparse.
    On the way in, raw values are calibrated, computed channels are added
-   (`Time_rx`, `RX_INT`, `TX_INT`, full-precision `PosLat`/`PosLong`/`PosAlt`)
+   (`Time_rx`, `RX_INT`, `TX_INT`, `RX_DELAY`, full-precision
+   `PosLat`/`PosLong`/`PosAlt`)
    and fields with unknown ids are left out (the rest of the packet is kept).
 4. **Frame** (`live.Frame`) — every row received since the previous frame,
    sent 20 times a second (`frame_rate`). Each packet stays its own row, so
@@ -150,3 +153,29 @@ at the default 30 minutes; about 50 MB with the ILTM's ~55 channels). When it
 fills, the oldest quarter is dropped. The cap is by rows, so a faster device
 gets less time in the same memory. In a 20× speed test (≈980 packets/s) the
 frontend heap levelled off around 45 MB and the backend around 140 MB.
+
+## Timing: device clock vs arrival time
+
+Over WiFi, packets arrive late and in bursts (the ESP32 queues them while
+busy), so plotting rows at their arrival time distorts the time axis: a burst
+of five packets 20 ms apart lands at one instant. When packets carry
+`Time_tx` the hub places each row at the device's time instead:
+
+- `timebase` keeps an offset with `T = Time_tx + offset`. A packet can only be
+  delayed, never early, so `arrival − Time_tx` is the true offset plus that
+  packet's delay; the smallest value seen is the best estimate. The offset
+  follows new minimums immediately and may rise by at most 200 µs per second
+  so it can follow clock drift between the ESP32 and the laptop (each is
+  within ~50 ppm). A device clock jumping back more than 2 s or forward more
+  than 60 s is a restart and resets the offset.
+- Rows wait in the hub for 120 ms before they are sent, so packets that
+  arrive out of order are sorted first. They are stamped when they leave the
+  buffer, with the newest offset, which matters for bursts: the offset is
+  only accurate once the burst's last packet has arrived.
+- A row that would still go before one already sent is placed just after it
+  and counted in the status as "late". `RX_DELAY` is each row's network delay
+  above the minimum, useful for judging the WiFi link.
+
+Packets without `Time_tx` (e.g. a relay that drops it) fall back to arrival
+time with no buffering. Logs downloaded from the SD card always use the
+logger's timestamps.

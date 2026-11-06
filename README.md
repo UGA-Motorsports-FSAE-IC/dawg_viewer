@@ -4,13 +4,35 @@ Desktop app for the UGA Motorsports data logger (ILTM). Replaces the Python
 app in `FSAE_Data_Acquisition/Software`. Runs on Windows, macOS and Linux.
 
 Done:
-  - [x] live data view.
+  - [x] live data view, with a live track map and lap timer.
   - [x] log/csv download.
   - [x] csv data viewer.
-
-Todo:
-  - [ ] more layouts
-  - [ ] savable/premade presets
+  - [x] Pi Toolbox-style analysis in the viewer: worksheets, laps from a GPS
+        start/finish line, lap overlays against distance with time slip,
+        math channels, XY (G-G) plots, histograms, track maps, statistics.
+  - [x] more layouts and savable/premade presets (worksheets, export/import).
+  - [x] spectrum (FFT) panel, lowpass/highpass filters, G-G envelope, launch
+        and wheel-slip analysis, GPS gap filling from speed and heading.
+  - [x] edit channel titles, colours, groups and ADC calibrations from the app;
+        Car tab for car specs. Both save to the device profile.
+  - [x] car map under the channel list that shows where each sensor is;
+        dots can be moved with ✎ Edit next to the map.
+  - [x] aero inputs in the Car tab and an Aero panel: grip against speed
+        compared with what the tyres and the aero should give.
+  - [x] − / + zoom on each plot; y axes ignore spikes and zoom with the wheel.
+  - [x] polynomial and known-point (curve fit) calibrations, with a graph of
+        the fit in the channel editor.
+  - [x] Test mode: a simulated car for trying the app without the logger.
+  - [x] filtered channels (low/high/band-pass, band-stop) made from the channel
+        list or a spectrum, with a preview of what the filter keeps.
+  - [x] saved setups (sheets, plots, made channels) in the config folder, and
+        a start-up choice between last session, a saved setup or fresh.
+  - [x] live data in the Viewer: every sheet and panel on the incoming stream.
+  - [x] compare runs: save a G-G envelope or aero grip curve and overlay it on
+        any other log or live data, with the difference worked out.
+  - [x] live data placed by the logger's clock (Time_tx) when it's sent.
+  - [x] lap setup: laps from a start/finish line, separate start and finish
+        lines, standing starts (acceleration runs) or only hand-placed marks.
 
 
 Check out the docs for information, if you are making commits to the project
@@ -25,6 +47,42 @@ The app finds the logger by itself (UDP discovery), learns channel names from
 it and shows the data. Pinned channels appear as cards; pick channels from the
 list on the left to plot them. Scroll on a plot to zoom, shift+scroll to pan,
 drag to zoom to a range; **Resume live** goes back to following new data.
+
+### Analysing a log (Viewer tab)
+
+Open a log, then:
+
+- **Worksheets** (tabs under the plots) hold pages of panels. Double-click a
+  tab to rename it. They're remembered for the next log; **Premade sheets**
+  builds Driver / Engine / Chassis sheets from the log's channels.
+- **Add** a Plot (channels against time), XY (one channel against another,
+  e.g. AccelY vs AccelX for a G-G diagram), Histogram or Track map. Clicking a
+  channel in the list puts it in the active panel (red edge).
+- **Laps:** in the Laps tab put the cursor where the car crosses the
+  start/finish line and click **Set start/finish at cursor**, or click
+  **Set start/finish** on a track map and click the line. Without GPS, split
+  laps by hand at the cursor. Click a lap to zoom to it. **Laps from** changes
+  how laps are found: a start/finish line (circuits), separate start and
+  finish lines (each run is start → finish), launches (each standing start is
+  a run of the set length, 75 m for acceleration, plus launches added in the
+  Launch panel) or only your own marks.
+- **Overlay:** tick laps, pick the reference with the radio button and click
+  **Overlay ticked laps**. Plots switch to lap distance, one line per lap;
+  add the **Time slip** channel to see where time is gained or lost.
+- **Math channels…** makes channels from formulas, e.g.
+  `hypot(AccelX, AccelY)` or `deriv(smooth(StrAngle, 0.05))`.
+- **Stats** shows min/avg/max over the part in view; **Values** shows every
+  channel at the cursor.
+- **Export setup** saves worksheets, math channels and the start/finish line
+  to a file the rest of the team can import.
+- **Spectrum** shows the frequency content of dampers or accelerometers;
+  then make a clean channel with e.g. `lowpass(AccelZ, 15)`.
+- **Launch** finds standing starts and plots g against the traction-limit
+  target and wheel slip against the target band (set the car in the **Car**
+  tab).
+- **✎** next to a channel (Live or Viewer) sets its title, colour, group, unit
+  and ADC calibration (two-point or gain/offset). It saves to the device
+  profile and applies to live data immediately.
 
 The first launch may ask to allow network access (Windows Firewall, macOS):
 allow it, or no data can arrive. Only one program can listen on the telemetry
@@ -102,5 +160,5 @@ internal/config   config folder, settings and device profiles (defaults/ is seed
 internal/calib    linear and Steinhart-Hart calibrations
 services/         Wails services the frontend calls
 cmd/iltm-sim      logger simulator
-frontend/src      React UI (live/, views/, plot/)
+frontend/src      React UI (live/, views/, plot/, analysis/, viewer/)
 ```

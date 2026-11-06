@@ -63,6 +63,7 @@ type ViewerChannel struct {
 
 type ViewerLog struct {
 	Name     string          `json:"name"`
+	Source   string          `json:"source"`
 	Path     string          `json:"path"`
 	Rows     int             `json:"rows"`
 	Note     string          `json:"note"`
@@ -352,7 +353,7 @@ func (s *LogService) Load(path string) (*ViewerLog, error) {
 			blob = binary.LittleEndian.AppendUint64(blob, math.Float64bits(v))
 		}
 	}
-	v := &ViewerLog{Name: filepath.Base(path), Path: path, Rows: rows, DataURL: logDataPath + s.keepBlob(blob)}
+	v := &ViewerLog{Name: filepath.Base(path), Source: string(source), Path: path, Rows: rows, DataURL: logDataPath + s.keepBlob(blob)}
 	if source != logfile.SourceWide {
 		hz := opts.Hz
 		if hz <= 0 {

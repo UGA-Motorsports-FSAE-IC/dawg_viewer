@@ -1,10 +1,10 @@
 import { memo, useEffect, useMemo, useRef, type Dispatch } from 'react'
 import type uPlot from 'uplot'
 import type { ChannelMeta } from '../../bindings/dawg_viewer/internal/config/models'
-import { mountPlot } from '../plot/mountPlot'
+import { mountPlot, type MountedPlot } from '../plot/mountPlot'
 import type { ViewSync } from '../plot/sync'
 import type { LayoutAction, Panel } from '../state/layout'
-import { colorFor, store } from './connection'
+import { colorFor, onLiveFrame, store } from './connection'
 import { formatValue } from './format'
 
 interface Props {
@@ -31,6 +31,7 @@ export const LivePlotPanel = memo(function LivePlotPanel({
   dispatch,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const plotRef = useRef<MountedPlot | null>(null)
   const valueEls = useRef(new Map<string, HTMLSpanElement>())
 
   const namesKey = panel.channelIds.filter((n) => known.has(n)).join('\n')
@@ -66,19 +67,26 @@ export const LivePlotPanel = memo(function LivePlotPanel({
       },
     })
     showValues()
-    const off = store.subscribe(() => {
-      plot.u.setData(plotData(names), false)
+    const off = onLiveFrame(() => {
+      plot.update(plotData(names))
       showValues()
     })
+    plotRef.current = plot
     return () => {
+      plotRef.current = null
       off()
       plot.destroy()
     }
   }, [names, metas, sync])
 
+  const spikeFree = !panel.fullY
+  useEffect(() => {
+    plotRef.current?.setSpikeFree(spikeFree)
+  }, [spikeFree, names, metas, sync])
+
   return (
     <section
-      className={`flex min-h-48 flex-1 flex-col border-l-2 bg-zinc-950 ${
+      className={`flex min-h-[17rem] flex-1 flex-col overflow-hidden border-l-2 bg-zinc-950 ${
         active ? 'border-red-500' : 'border-transparent'
       }`}
       onPointerDown={() => dispatch({ type: 'setActive', panelId: panel.id })}
@@ -113,6 +121,22 @@ export const LivePlotPanel = memo(function LivePlotPanel({
             </li>
           ))}
         </ul>
+        <button
+          type="button"
+          aria-pressed={spikeFree}
+          aria-label={`Ignore spikes when scaling plot ${index + 1}`}
+          title={
+            spikeFree
+              ? 'Y axis ignores the most extreme 0.1% of points. Click to fit every point. Wheel over an axis to zoom it, double-click it to reset.'
+              : 'Y axis fits every point. Click to ignore spikes. Wheel over an axis to zoom it, double-click it to reset.'
+          }
+          className={`shrink-0 ${spikeFree ? 'text-zinc-200' : 'text-zinc-600'} hover:text-zinc-100`}
+          onClick={() =>
+            dispatch({ type: 'setPanel', panelId: panel.id, patch: { fullY: spikeFree } })
+          }
+        >
+          ↕
+        </button>
         <button
           type="button"
           aria-label={`Close plot ${index + 1}`}
