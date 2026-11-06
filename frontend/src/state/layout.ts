@@ -49,19 +49,11 @@ export type LayoutAction =
       panelId: number
       changes: Partial<Extract<GraphConfig, { type: 'histogram' }>>
     }
-  | { type: 'movePanel'; fromId: number; toId: number; snap?: SnapZone }
-  | { type: 'movePanelToIndex'; panelId: number; index: number }
-  | { type: 'placePanel'; panelId: number; row: number; col: 0 | 1 }
-  | { type: 'togglePanelWidth'; panelId: number }
-  | { type: 'togglePanelHeight'; panelId: number }
-  | {
-      type: 'resizePanel'
-      panelId: number
-      colSpan?: BentoSpan
-      rowSpan?: BentoRowSpan
-      widthPct?: number
-      height?: number
-    }
+  | { type: 'dropPanel'; panelId: number; targetId: number; zone: DropZone }
+  | { type: 'moveRow'; rowId: number; toIndex: number }
+  | { type: 'setRowHeight'; rowId: number; height: number }
+  | { type: 'splitPanel'; panelId: number }
+  | { type: 'joinPanel'; panelId: number }
   | { type: 'setLayout'; layout: Layout }
 
 const PLOT_LAYOUT_KEY = 'dawg.live-plots.v2'
@@ -94,12 +86,11 @@ export function clampHeight(height: number): number {
 
 export function makeLayout(panels: string[][]): Layout {
   return {
-    panels: assignPlotSlots(
-      panels.map((channelIds, i) => ({
-        id: i + 1,
-        channelIds: channelIds.slice(0, MAX_PANEL_STREAMS),
-      })),
-    ),
+    panels: panels.map((channelIds, i) => ({
+      id: i + 1,
+      channelIds: channelIds.slice(0, MAX_PANEL_STREAMS),
+    })),
+    rows: panels.map((_, i) => ({ id: i + 1, panelIds: [i + 1], height: DEFAULT_ROW_HEIGHT })),
     activeId: 1,
     nextId: panels.length + 1,
     nextRowId: panels.length + 1,
@@ -225,7 +216,7 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
         ...layout,
         panels: layout.panels.map((p) =>
           p.id === action.panelId && p.graph?.type === 'histogram'
-            ? { ...p, graph: { type: 'histogram', bins: action.bins } }
+            ? { ...p, graph: { ...p.graph, bins: action.bins } }
             : p,
         ),
       }
@@ -275,12 +266,15 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
       }
     case 'removePanel': {
       if (layout.panels.length === 1) return updatePanel(layout, action.panelId, () => [])
-      const remaining = layout.panels.filter((p) => p.id !== action.panelId)
-      const panels = assignPlotSlots(
-        remaining.length === 1 ? [{ ...remaining[0], slot: undefined }] : remaining,
-      )
-      const activeId = layout.activeId === action.panelId ? panels[0].id : layout.activeId
-      return { ...layout, panels, activeId }
+      if (!layout.panels.some((p) => p.id === action.panelId)) return layout
+      const next: Layout = {
+        ...layout,
+        panels: layout.panels.filter((p) => p.id !== action.panelId),
+        rows: withoutPanel(layout.rows, action.panelId),
+      }
+      const activeId =
+        layout.activeId === action.panelId ? orderedPanels(next)[0].id : layout.activeId
+      return { ...next, activeId }
     }
     case 'setActive':
       return layout.activeId === action.panelId ? layout : { ...layout, activeId: action.panelId }
@@ -306,50 +300,42 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
       if (!row || row.height === height) return layout
       return {
         ...layout,
-        panels: assignPlotSlots(
-          layout.panels.map((p) => {
-            if (p.id !== action.panelId) return p
-            const nextSpan: BentoSpan = (p.colSpan ?? 1) === 2 ? 1 : 2
-            return {
-              ...p,
-              colSpan: nextSpan,
-              widthPct: nextSpan === 2 ? 100 : 50,
-            }
-          }),
-        ),
+        rows: layout.rows.map((r) => (r.id === action.rowId ? { ...r, height } : r)),
       }
-    case 'togglePanelHeight':
-      return {
-        ...layout,
-        panels: assignPlotSlots(
-          layout.panels.map((p) => {
-            if (p.id !== action.panelId) return p
-            const nextRow: BentoRowSpan = (p.rowSpan ?? 1) >= 2 ? 1 : 2
-            return {
-              ...p,
-              rowSpan: nextRow,
-              height: nextRow * DEFAULT_ROW_HEIGHT,
-            }
-          }),
-        ),
-      }
-    case 'resizePanel':
-      return {
-        ...layout,
-        panels: assignPlotSlots(
-          layout.panels.map((p) =>
-            p.id === action.panelId
-              ? {
-                  ...p,
-                  colSpan: action.colSpan ?? p.colSpan,
-                  rowSpan: action.rowSpan ?? p.rowSpan,
-                  widthPct: action.widthPct ?? p.widthPct,
-                  height: action.height ?? p.height,
-                }
-              : p,
-          ),
-        ),
-      }
+    }
+    case 'splitPanel': {
+      const at = rowIndexOf(layout.rows, action.panelId)
+      if (at < 0 || layout.rows[at].panelIds.length !== 2) return layout
+      const row = layout.rows[at]
+      const rows = [...layout.rows]
+      rows[at] = { ...row, panelIds: row.panelIds.filter((id) => id !== action.panelId) }
+      rows.splice(at + 1, 0, {
+        id: layout.nextRowId,
+        panelIds: [action.panelId],
+        height: row.height,
+      })
+      return { ...layout, rows, nextRowId: layout.nextRowId + 1 }
+    }
+    case 'joinPanel': {
+      const partnerId = joinTarget(layout.rows, action.panelId)
+      if (partnerId === undefined) return layout
+      const own = layout.rows[rowIndexOf(layout.rows, action.panelId)]
+      const partner = layout.rows.find((r) => r.id === partnerId)!
+      const before = layout.rows.indexOf(partner) < layout.rows.indexOf(own)
+      const rows = layout.rows
+        .filter((r) => r.id !== own.id)
+        .map((r) =>
+          r.id === partnerId
+            ? {
+                ...r,
+                panelIds: before
+                  ? [...r.panelIds, action.panelId]
+                  : [action.panelId, ...r.panelIds],
+              }
+            : r,
+        )
+      return { ...layout, rows }
+    }
     case 'setLayout':
       return action.layout
   }
@@ -372,6 +358,42 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
+function parseGraph(value: unknown): GraphConfig | undefined {
+  const graph = asRecord(value)
+  if (!graph) return undefined
+  if (graph.type === 'timeSeries') return { type: 'timeSeries' }
+  if (graph.type !== 'histogram') return undefined
+  const range = asRecord(graph.valueRange)
+  const valueRange =
+    range &&
+    typeof range.min === 'number' &&
+    Number.isFinite(range.min) &&
+    typeof range.max === 'number' &&
+    Number.isFinite(range.max) &&
+    range.min < range.max
+      ? { min: range.min, max: range.max }
+      : null
+  return {
+    type: 'histogram',
+    bins:
+      typeof graph.bins === 'number' &&
+      Number.isInteger(graph.bins) &&
+      graph.bins >= 5 &&
+      graph.bins <= 200
+        ? graph.bins
+        : 30,
+    valueRange,
+    orientation: graph.orientation === 'horizontal' ? 'horizontal' : 'vertical',
+    frequency: graph.frequency === 'percent' ? 'percent' : 'count',
+    frequencyMax:
+      typeof graph.frequencyMax === 'number' &&
+      Number.isFinite(graph.frequencyMax) &&
+      graph.frequencyMax > 0
+        ? graph.frequencyMax
+        : null,
+  }
+}
+
 function parseLayout(entry: unknown): Layout | null {
   const raw = asRecord(entry)
   if (!raw || !Array.isArray(raw.panels) || !Array.isArray(raw.rows)) return null
@@ -389,7 +411,15 @@ function parseLayout(entry: unknown): Layout | null {
     )
       return null
     ids.add(p.id)
-    panels.push({ id: p.id, channelIds: p.channelIds as string[] })
+    const graph = parseGraph(p.graph)
+    panels.push({
+      id: p.id,
+      channelIds: (p.channelIds as string[]).slice(
+        0,
+        graph?.type === 'histogram' ? 1 : MAX_PANEL_STREAMS,
+      ),
+      ...(graph ? { graph } : {}),
+    })
   }
   const placed = new Set<number>()
   const rowIds = new Set<number>()
@@ -434,6 +464,7 @@ export function migrateLegacyLayout(entry: unknown): Layout | null {
   const items: {
     id: number
     channelIds: string[]
+    graph?: GraphConfig
     row: number
     col: number
     wide: boolean
@@ -453,9 +484,14 @@ export function migrateLegacyLayout(entry: unknown): Layout | null {
     ids.add(p.id)
     const slot = asRecord(p.slot)
     const rowSpan = typeof p.rowSpan === 'number' ? p.rowSpan : 1
+    const graph = parseGraph(p.graph)
     items.push({
       id: p.id,
-      channelIds: p.channelIds as string[],
+      channelIds: (p.channelIds as string[]).slice(
+        0,
+        graph?.type === 'histogram' ? 1 : MAX_PANEL_STREAMS,
+      ),
+      ...(graph ? { graph } : {}),
       row: slot && typeof slot.row === 'number' ? slot.row : order,
       col: slot && typeof slot.col === 'number' ? slot.col : 0,
       wide: p.colSpan === 2 || (typeof p.widthPct === 'number' && p.widthPct > 75),
@@ -482,7 +518,11 @@ export function migrateLegacyLayout(entry: unknown): Layout | null {
   const activeId =
     typeof raw.activeId === 'number' && ids.has(raw.activeId) ? raw.activeId : items[0].id
   return {
-    panels: items.map((i) => ({ id: i.id, channelIds: i.channelIds })),
+    panels: items.map((i) => ({
+      id: i.id,
+      channelIds: i.channelIds,
+      ...(i.graph ? { graph: i.graph } : {}),
+    })),
     rows,
     activeId,
     nextId: typeof raw.nextId === 'number' && raw.nextId > maxId ? raw.nextId : maxId + 1,

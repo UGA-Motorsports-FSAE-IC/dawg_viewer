@@ -1,10 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_ROW_HEIGHT,
-  MAX_ROW_HEIGHT,
-  MIN_ROW_HEIGHT,
   detectDropZone,
-  joinTarget,
   layoutReducer,
   loadPlotLayout,
   makeLayout,
@@ -109,57 +106,6 @@ describe('layoutReducer', () => {
     expect(order(layout)).toEqual([[3], [1, 2]])
     expect(layout.rows[1].height).toBe(333)
     expect(orderedPanels(layout).map((p) => p.id)).toEqual([3, 1, 2])
-  })
-
-  it('swaps occupied slots and moves into empty space without shifting other plots', () => {
-    let layout = makeLayout([['RPM'], ['TPS1'], ['CLT1']])
-    expect(layout.panels.map((panel) => panel.slot)).toEqual([
-      { row: 0, col: 0 },
-      { row: 0, col: 1 },
-      { row: 1, col: 0 },
-    ])
-    layout = layoutReducer(layout, { type: 'placePanel', panelId: 1, row: 0, col: 1 })
-    expect(layout.panels.map((panel) => panel.slot)).toEqual([
-      { row: 0, col: 1 },
-      { row: 0, col: 0 },
-      { row: 1, col: 0 },
-    ])
-    layout = layoutReducer(layout, { type: 'placePanel', panelId: 1, row: 3, col: 1 })
-    expect(layout.panels.map((panel) => panel.slot)).toEqual([
-      { row: 3, col: 1 },
-      { row: 0, col: 0 },
-      { row: 1, col: 0 },
-    ])
-    expect(validPlacement(layout.panels)).toBe(true)
-  })
-
-  it('moves both short plots into the space vacated by a tall plot', () => {
-    const start = {
-      panels: [
-        { id: 1, channelIds: ['RPM'], rowSpan: 2 as const, slot: { row: 0, col: 0 as const } },
-        { id: 2, channelIds: ['TPS1'], slot: { row: 0, col: 1 as const } },
-        { id: 3, channelIds: ['CLT1'], slot: { row: 1, col: 1 as const } },
-      ],
-      activeId: 1,
-      nextId: 4,
-    }
-    const expected = [
-      { row: 0, col: 1 },
-      { row: 0, col: 0 },
-      { row: 1, col: 0 },
-    ]
-    // Hovering either short plot previews the same two-row replacement.
-    expect(previewPlotPlacement(start.panels, 1, { row: 0, col: 1 })?.map((p) => p.slot)).toEqual(
-      expected,
-    )
-    expect(previewPlotPlacement(start.panels, 1, { row: 1, col: 1 })?.map((p) => p.slot)).toEqual(
-      expected,
-    )
-    const layout = layoutReducer(start, { type: 'placePanel', panelId: 1, row: 1, col: 1 })
-    expect(layout.panels.map((panel) => panel.slot)).toEqual(expected)
-    expect(validPlacement(layout.panels)).toBe(true)
-    savePlotLayout('tall-swap', layout)
-    expect(loadPlotLayout('tall-swap', makeLayout([['RPM']]))).toEqual(layout)
   })
 
   it('removing one plot of a pair keeps the other with the row height', () => {

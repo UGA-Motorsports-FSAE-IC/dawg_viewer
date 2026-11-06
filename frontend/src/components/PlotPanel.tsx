@@ -31,7 +31,6 @@ export const PlotPanel = memo(function PlotPanel({
   dispatch,
 }: Props) {
   useStreamColors()
-  const sectionRef = useRef<HTMLElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const valueEls = useRef(new Map<string, HTMLSpanElement>())
 
@@ -64,58 +63,6 @@ export const PlotPanel = memo(function PlotPanel({
     })
     return plot.destroy
   }, [channels, session, sync, panel.graph?.type, colorsKey])
-
-  const startEdgeResize = (edge: ResizeEdge) => (event: React.PointerEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    const startX = event.clientX
-    const startY = event.clientY
-    const startCol = colSpan
-    const startRow = rowSpan
-    const startWidthPct = widthPct
-    const rect = sectionRef.current?.getBoundingClientRect()
-    const startHeightPx = rect && rect.height > 0 ? rect.height : heightPx
-    const containerWidthPx =
-      (slotted
-        ? sectionRef.current?.parentElement?.parentElement
-        : sectionRef.current?.parentElement
-      )?.clientWidth ?? 0
-
-    setActiveEdge(edge)
-
-    const onMove = (moveEvent: PointerEvent) => {
-      const dx = moveEvent.clientX - startX
-      const dy = moveEvent.clientY - startY
-      const next = computeEdgeResize(edge, dx, dy, startCol, startRow, {
-        startWidthPct,
-        startHeightPx,
-        containerWidthPx,
-      })
-      if (sectionRef.current) {
-        if (next.widthPct !== undefined) {
-          sectionRef.current.style.width = slotted ? '100%' : panelWidthStyle(next.widthPct)
-        }
-        if (next.height !== undefined) {
-          sectionRef.current.style.height = `${next.height}px`
-        }
-      }
-      dispatch({
-        type: 'resizePanel',
-        panelId: panel.id,
-        colSpan: next.colSpan,
-        rowSpan: next.rowSpan,
-        widthPct: next.widthPct,
-        height: next.height,
-      })
-    }
-    const onUp = () => {
-      setActiveEdge(null)
-      document.removeEventListener('pointermove', onMove)
-      document.removeEventListener('pointerup', onUp)
-    }
-    document.addEventListener('pointermove', onMove)
-    document.addEventListener('pointerup', onUp)
-  }
 
   const blockDrag = (event: React.DragEvent) => {
     event.preventDefault()
@@ -200,66 +147,6 @@ export const PlotPanel = memo(function PlotPanel({
           )}
         </div>
       </GraphBody>
-
-      {/* Left edge drag handle */}
-      <div
-        role="separator"
-        aria-label={`Drag left edge of plot ${index + 1}`}
-        data-edge="left"
-        title="Drag edge to dynamically resize width"
-        draggable
-        onDragStart={blockDrag}
-        onPointerDown={startEdgeResize('left')}
-        onDoubleClick={() => dispatch({ type: 'togglePanelWidth', panelId: panel.id })}
-        className={`absolute top-0 bottom-2 left-0 z-10 w-2 cursor-ew-resize transition-colors hover:bg-red-500/40 ${
-          activeEdge === 'left' ? 'bg-red-500/60' : ''
-        }`}
-      />
-
-      {/* Right edge drag handle */}
-      <div
-        role="separator"
-        aria-label={`Drag right edge of plot ${index + 1}`}
-        data-edge="right"
-        title="Drag edge to dynamically resize width"
-        draggable
-        onDragStart={blockDrag}
-        onPointerDown={startEdgeResize('right')}
-        onDoubleClick={() => dispatch({ type: 'togglePanelWidth', panelId: panel.id })}
-        className={`absolute top-0 right-0 bottom-2 z-10 w-2 cursor-ew-resize transition-colors hover:bg-red-500/40 ${
-          activeEdge === 'right' ? 'bg-red-500/60' : ''
-        }`}
-      />
-
-      {/* Bottom edge drag handle */}
-      <div
-        role="separator"
-        aria-label={`Drag bottom edge of plot ${index + 1}`}
-        data-edge="bottom"
-        title="Drag edge to dynamically resize height"
-        draggable
-        onDragStart={blockDrag}
-        onPointerDown={startEdgeResize('bottom')}
-        onDoubleClick={() => dispatch({ type: 'togglePanelHeight', panelId: panel.id })}
-        className={`absolute right-2 bottom-0 left-0 z-10 h-2 cursor-ns-resize transition-colors hover:bg-red-500/40 ${
-          activeEdge === 'bottom' ? 'bg-red-500/60' : ''
-        }`}
-      />
-
-      {/* Bottom-right corner drag handle */}
-      <div
-        role="separator"
-        aria-label={`Resize plot ${index + 1}`}
-        data-edge="corner"
-        title="Drag corner to dynamically resize plot"
-        draggable
-        onDragStart={blockDrag}
-        onPointerDown={startEdgeResize('corner')}
-        onDoubleClick={() => dispatch({ type: 'togglePanelWidth', panelId: panel.id })}
-        className={`absolute right-0 bottom-0 z-20 size-3.5 cursor-nwse-resize border-r-2 border-b-2 transition-colors hover:border-red-500 ${
-          activeEdge === 'corner' ? 'border-red-500 bg-red-500/30' : 'border-zinc-600'
-        }`}
-      />
     </section>
   )
 })
