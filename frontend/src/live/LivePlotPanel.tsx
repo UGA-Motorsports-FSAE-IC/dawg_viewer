@@ -1,9 +1,10 @@
-import { memo, useEffect, useMemo, useRef, type Dispatch } from 'react'
+import { memo, useEffect, useMemo, useRef, type Dispatch, type DragEvent } from 'react'
 import type uPlot from 'uplot'
 import type { ChannelMeta } from '../../bindings/dawg_viewer/internal/config/models'
 import { mountPlot, type MountedPlot } from '../plot/mountPlot'
 import type { ViewSync } from '../plot/sync'
 import type { LayoutAction, Panel } from '../state/layout'
+import type { BentoSize } from '../state/liveBento'
 import { colorFor, onLiveFrame, store } from './connection'
 import { formatValue } from './format'
 
@@ -15,6 +16,10 @@ interface Props {
   metas: Record<string, ChannelMeta | undefined>
   sync: ViewSync
   dispatch: Dispatch<LayoutAction>
+  bento?: boolean
+  startDrag?: (event: DragEvent<HTMLElement>) => void
+  size?: BentoSize
+  onSize?: (size: BentoSize) => void
 }
 
 function plotData(names: string[]): uPlot.AlignedData {
@@ -29,6 +34,10 @@ export const LivePlotPanel = memo(function LivePlotPanel({
   metas,
   sync,
   dispatch,
+  bento = false,
+  startDrag,
+  size,
+  onSize,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<MountedPlot | null>(null)
@@ -86,13 +95,19 @@ export const LivePlotPanel = memo(function LivePlotPanel({
 
   return (
     <section
-      className={`flex min-h-[17rem] flex-1 flex-col overflow-hidden border-l-2 bg-zinc-950 ${
+      className={`flex min-w-0 flex-1 flex-col overflow-hidden border-l-2 bg-zinc-950 ${bento ? 'h-full min-h-0' : 'min-h-[17rem]'} ${
         active ? 'border-red-500' : 'border-transparent'
       }`}
       onPointerDown={() => dispatch({ type: 'setActive', panelId: panel.id })}
     >
       <header className="flex items-center gap-3 border-b border-zinc-800 px-3 py-1 text-xs">
-        <span className="shrink-0 text-zinc-500">Plot {index + 1}</span>
+        <span
+          draggable={bento}
+          onDragStart={startDrag}
+          className={`shrink-0 text-zinc-500 ${bento ? 'cursor-grab' : ''}`}
+        >
+          Plot {index + 1}
+        </span>
         <ul className="flex min-w-0 flex-1 flex-wrap gap-x-4 gap-y-1">
           {panel.channelIds.map((n) => (
             <li key={n} className="group flex items-center gap-1.5">
@@ -121,6 +136,38 @@ export const LivePlotPanel = memo(function LivePlotPanel({
             </li>
           ))}
         </ul>
+        {bento && onSize && (
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              aria-label={`Toggle height plot ${index + 1}`}
+              aria-pressed={size?.height === 'tall'}
+              className="rounded px-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+              onClick={() =>
+                onSize({
+                  width: size?.width ?? 'half',
+                  height: size?.height === 'tall' ? 'short' : 'tall',
+                })
+              }
+            >
+              T
+            </button>
+            <button
+              type="button"
+              aria-label={`Toggle width plot ${index + 1}`}
+              aria-pressed={size?.width === 'full'}
+              className="rounded px-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+              onClick={() =>
+                onSize({
+                  height: size?.height ?? 'short',
+                  width: size?.width === 'full' ? 'half' : 'full',
+                })
+              }
+            >
+              W
+            </button>
+          </div>
+        )}
         <button
           type="button"
           aria-pressed={spikeFree}

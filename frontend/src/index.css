@@ -16,6 +16,9 @@ html,
 body,
 #root {
   height: 100%;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 html {
@@ -23,6 +26,7 @@ html {
 }
 
 body {
+  margin: 0;
   @apply bg-zinc-950 text-zinc-100 antialiased;
 }
 
@@ -41,4 +45,17 @@ body {
   transform-box: fill-box;
   transform-origin: center;
   animation: sensor-pulse 0.7s ease-out 2;
+}
+
+@container (max-width: 720px) {
+  .live-bento-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none !important;
+  }
+
+  .live-bento-grid > [data-graph-id] {
+    grid-column: 1 !important;
+    grid-row: auto !important;
+    min-height: 17rem;
+  }
 }

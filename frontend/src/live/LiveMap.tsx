@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
+import type { BentoSize } from '../state/liveBento'
 import { formatLapTime, lowerBound, validFix } from '../analysis/track'
 import { mountTrackMap } from '../plot/trackMap'
 import { track, useTrack } from '../state/analysis'
@@ -17,7 +18,19 @@ const col = (names: string[]) => {
   return null
 }
 
-export function LiveMap({ onClose }: { onClose: () => void }) {
+export function LiveMap({
+  onClose,
+  bento = false,
+  startDrag,
+  size,
+  onSize,
+}: {
+  onClose: () => void
+  bento?: boolean
+  startDrag?: (event: DragEvent<HTMLElement>) => void
+  size?: BentoSize
+  onSize?: (size: BentoSize) => void
+}) {
   const hostRef = useRef<HTMLDivElement>(null)
   const curRef = useRef<HTMLSpanElement>(null)
   const lastRef = useRef<HTMLSpanElement>(null)
@@ -130,9 +143,49 @@ export function LiveMap({ onClose }: { onClose: () => void }) {
   }, [])
 
   return (
-    <aside className="flex w-96 shrink-0 flex-col border-l border-zinc-800 bg-zinc-950">
+    <aside
+      className={`flex min-h-0 flex-col border-l border-zinc-800 bg-zinc-950 ${bento ? 'h-full min-w-0 flex-1' : 'w-96 shrink-0'}`}
+    >
       <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-1.5 text-xs">
-        <span className="text-zinc-500">Track</span>
+        <span
+          draggable={bento}
+          onDragStart={startDrag}
+          className={`text-zinc-500 ${bento ? 'cursor-grab' : ''}`}
+        >
+          Track
+        </span>
+        {bento && onSize && (
+          <>
+            <button
+              type="button"
+              aria-label="Toggle height track-map"
+              aria-pressed={size?.height === 'tall'}
+              className="rounded px-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+              onClick={() =>
+                onSize({
+                  width: size?.width ?? 'half',
+                  height: size?.height === 'tall' ? 'short' : 'tall',
+                })
+              }
+            >
+              T
+            </button>
+            <button
+              type="button"
+              aria-label="Toggle width track-map"
+              aria-pressed={size?.width === 'full'}
+              className="rounded px-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+              onClick={() =>
+                onSize({
+                  height: size?.height ?? 'short',
+                  width: size?.width === 'full' ? 'half' : 'full',
+                })
+              }
+            >
+              W
+            </button>
+          </>
+        )}
         <button
           type="button"
           className={picking ? toolbarButtonActive : toolbarButton}

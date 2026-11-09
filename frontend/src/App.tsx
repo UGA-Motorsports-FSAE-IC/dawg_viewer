@@ -11,6 +11,7 @@ import { CarView } from './views/CarView'
 import { LiveView } from './views/LiveView'
 import { LogsView } from './views/LogsView'
 import { SettingsView } from './views/SettingsView'
+import { loadLiveLayoutMode, saveLiveLayoutMode, type LiveLayoutMode } from './settings/liveLayout'
 import { ViewerView } from './views/ViewerView'
 
 type Tab = 'live' | 'logs' | 'viewer' | 'car' | 'settings'
@@ -25,6 +26,11 @@ const TABS: { id: Tab; label: string }[] = [
 
 function App() {
   const [tab, setTab] = useState<Tab>('live')
+  const [liveLayoutMode, setLiveLayoutMode] = useState<LiveLayoutMode>(loadLiveLayoutMode)
+  const changeLiveLayoutMode = (mode: LiveLayoutMode) => {
+    setLiveLayoutMode(mode)
+    saveLiveLayoutMode(mode)
+  }
   useEffect(() => setLiveShown(tab === 'live'), [tab])
   const version = useInfo()?.version
   const testing = useTestMode()
@@ -81,8 +87,8 @@ function App() {
   }
 
   return (
-    <div className="flex h-full flex-col select-none">
-      <nav className="flex items-center gap-1 border-b border-zinc-800 px-3">
+    <div className="flex h-full max-w-full min-w-0 flex-col overflow-hidden select-none">
+      <nav className="flex min-w-0 flex-wrap items-center gap-1 border-b border-zinc-800 px-3">
         <img
           src="/bulldog.png"
           alt="Georgia Bulldogs"
@@ -111,7 +117,7 @@ function App() {
             {t.label}
           </button>
         ))}
-        <span className="ml-auto flex items-center gap-3">
+        <span className="ml-auto flex min-w-0 flex-wrap items-center gap-3">
           <button
             type="button"
             className="rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-100"
@@ -154,15 +160,15 @@ function App() {
           {version && <span className="text-xs text-zinc-600">v{version}</span>}
         </span>
       </nav>
-      <div className={`min-h-0 flex-1 ${tab === 'live' ? '' : 'hidden'}`}>
-        <LiveView />
+      <div className={`min-h-0 min-w-0 flex-1 overflow-hidden ${tab === 'live' ? '' : 'hidden'}`}>
+        <LiveView layoutMode={liveLayoutMode} />
       </div>
       {tab === 'logs' && (
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
           <LogsView onOpen={(path) => load(() => openLog(path))} />
         </div>
       )}
-      <div className={`min-h-0 flex-1 ${tab === 'viewer' ? '' : 'hidden'}`}>
+      <div className={`min-h-0 min-w-0 flex-1 overflow-hidden ${tab === 'viewer' ? '' : 'hidden'}`}>
         <ViewerView
           session={session}
           loading={loading}
@@ -191,13 +197,13 @@ function App() {
         />
       </div>
       {tab === 'car' && (
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
           <CarView />
         </div>
       )}
       {tab === 'settings' && (
-        <div className="min-h-0 flex-1">
-          <SettingsView />
+        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+          <SettingsView layoutMode={liveLayoutMode} onLayoutMode={changeLiveLayoutMode} />
         </div>
       )}
       {setups && (

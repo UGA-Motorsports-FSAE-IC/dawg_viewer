@@ -3,6 +3,7 @@ import type { ChannelMeta } from '../../bindings/dawg_viewer/internal/config/mod
 import { ChannelEditor } from '../components/ChannelEditor'
 import { ChannelList, type ListChannel } from '../components/ChannelList'
 import { RangeBar } from '../components/RangeBar'
+import { LiveGraphStack } from '../components/LiveGraphStack'
 import { defaultGroup } from '../data/groups'
 import { colorFor, onLiveFrame, startLive, store, useChannels, useInfo } from '../live/connection'
 import { LiveMap } from '../live/LiveMap'
@@ -11,6 +12,13 @@ import { PinnedCards } from '../live/PinnedCards'
 import { StatusHeader } from '../live/StatusHeader'
 import { liveSync, resumeFollow, showWindow, useFollow } from '../live/follow'
 import { layoutReducer, makeLayout } from '../state/layout'
+import {
+  assignBentoSlots,
+  visualBentoOrder,
+  type BentoSize,
+  type BentoSlot,
+} from '../state/liveBento'
+import type { LiveLayoutMode } from '../settings/liveLayout'
 import { toolbarButton, toolbarButtonActive } from '../ui'
 
 const initialLayout = makeLayout([
@@ -32,7 +40,7 @@ const liveBounds = () => store.bounds()
 const liveSubscribe = (fn: () => void) => onLiveFrame(fn)
 const NO_METAS: Record<string, ChannelMeta | undefined> = {}
 
-export function LiveView() {
+export function LiveView({ layoutMode = 'default' }: { layoutMode?: LiveLayoutMode }) {
   useEffect(startLive, [])
   const info = useInfo()
   const channels = useChannels()
@@ -42,6 +50,26 @@ export function LiveView() {
 
   const { follow, windowS } = useFollow()
   const [showMap, setShowMap] = useState(false)
+  const [sizes, setSizes] = useState<Record<string, BentoSize>>({})
+  const [order, setOrder] = useState<string[]>([])
+  const [slots, setSlots] = useState<Record<string, BentoSlot>>({})
+  const [previousMode, setPreviousMode] = useState(layoutMode)
+  const ids = [...layout.panels.map((p) => `plot:${p.id}`), ...(showMap ? ['track-map'] : [])]
+  const orderedIds = [
+    ...order.filter((id) => ids.includes(id)),
+    ...ids.filter((id) => !order.includes(id)),
+  ]
+  if (previousMode !== layoutMode) {
+    setPreviousMode(layoutMode)
+    if (layoutMode === 'default') {
+      const visual = visualBentoOrder(assignBentoSlots(orderedIds, sizes, slots))
+      dispatch({
+        type: 'orderPanels',
+        ids: visual.filter((id) => id.startsWith('plot:')).map((id) => Number(id.slice(5))),
+      })
+      setOrder(visual)
+    } else setOrder(ids)
+  }
 
   const known = useMemo(() => new Set(channels.map((c) => c.name)), [channels])
   const listChannels = useMemo<ListChannel[]>(
@@ -67,9 +95,9 @@ export function LiveView() {
   const currentValue = useCallback(() => (editing ? store.latest(editing) : undefined), [editing])
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden">
       <StatusHeader />
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <ChannelList
           channels={listChannels}
           selectedIds={activePanel?.channelIds ?? NO_CHANNELS}
@@ -78,7 +106,7 @@ export function LiveView() {
         />
         <div className="flex min-w-0 flex-1 flex-col">
           <PinnedCards metas={metas} />
-          <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-1.5">
+          <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 border-b border-zinc-800 px-3 py-1.5">
             {WINDOWS.map(([s, label]) => (
               <button
                 key={label}
@@ -113,22 +141,45 @@ export function LiveView() {
               Add plot
             </button>
           </div>
-          <div className="flex min-h-0 flex-1">
-            <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-px overflow-y-auto bg-zinc-800">
-              {layout.panels.map((panel, i) => (
-                <LivePlotPanel
-                  key={panel.id}
-                  panel={panel}
-                  index={i}
-                  active={panel.id === layout.activeId}
-                  known={known}
-                  metas={metas}
-                  sync={liveSync}
-                  dispatch={dispatch}
-                />
-              ))}
-            </main>
-            {showMap && <LiveMap onClose={() => setShowMap(false)} />}
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+            <LiveGraphStack
+              ids={layoutMode === 'bento' ? orderedIds : layout.panels.map((p) => `plot:${p.id}`)}
+              sizes={sizes}
+              slots={slots}
+              mode={layoutMode}
+              onSlots={setSlots}
+              render={(id, bento, startDrag) =>
+                id === 'track-map' ? (
+                  <LiveMap
+                    onClose={() => setShowMap(false)}
+                    bento={bento}
+                    startDrag={startDrag}
+                    size={sizes[id]}
+                    onSize={(size) => setSizes((current) => ({ ...current, [id]: size }))}
+                  />
+                ) : (
+                  (() => {
+                    const panel = layout.panels.find((p) => `plot:${p.id}` === id)!
+                    return (
+                      <LivePlotPanel
+                        panel={panel}
+                        index={layout.panels.indexOf(panel)}
+                        active={panel.id === layout.activeId}
+                        known={known}
+                        metas={metas}
+                        sync={liveSync}
+                        dispatch={dispatch}
+                        bento={bento}
+                        startDrag={startDrag}
+                        size={sizes[id]}
+                        onSize={(size) => setSizes((current) => ({ ...current, [id]: size }))}
+                      />
+                    )
+                  })()
+                )
+              }
+            />
+            {showMap && layoutMode === 'default' && <LiveMap onClose={() => setShowMap(false)} />}
           </div>
           <RangeBar sync={liveSync} bounds={liveBounds} subscribe={liveSubscribe} minSpan={1} />
         </div>

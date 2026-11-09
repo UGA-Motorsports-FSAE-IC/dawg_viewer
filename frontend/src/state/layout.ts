@@ -27,6 +27,7 @@ export type LayoutAction =
   | { type: 'setActive'; panelId: number }
   | { type: 'setPanel'; panelId: number; patch: Partial<Omit<Panel, 'id'>> }
   | { type: 'movePanel'; panelId: number; by: number }
+  | { type: 'orderPanels'; ids: number[] }
 
 export const panelDefaults = (kind: PanelKind): Omit<Panel, 'id' | 'channelIds'> =>
   kind === 'time' || kind === 'launch' || kind === 'aero'
@@ -119,6 +120,16 @@ export function layoutReducer(layout: Layout, action: LayoutAction): Layout {
       const panels = [...layout.panels]
       ;[panels[i], panels[j]] = [panels[j], panels[i]]
       return { ...layout, panels }
+    }
+    case 'orderPanels': {
+      const byId = new Map(layout.panels.map((p) => [p.id, p]))
+      if (
+        action.ids.length !== layout.panels.length ||
+        new Set(action.ids).size !== byId.size ||
+        action.ids.some((id) => !byId.has(id))
+      )
+        return layout
+      return { ...layout, panels: action.ids.map((id) => byId.get(id)!) }
     }
   }
 }

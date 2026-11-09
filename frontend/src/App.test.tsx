@@ -16,7 +16,9 @@ vi.mock('./testmode/testMode', () => ({
   TEST_LOG_PATH: 'test',
 }))
 vi.mock('./viewer/openLog', () => ({ openLog: vi.fn(), pickAndOpenLog: vi.fn() }))
-vi.mock('./views/LiveView', () => ({ LiveView: () => <div>Live dashboard</div> }))
+vi.mock('./views/LiveView', () => ({
+  LiveView: ({ layoutMode }: { layoutMode: string }) => <div>Live dashboard: {layoutMode}</div>,
+}))
 vi.mock('./views/LogsView', () => ({
   LogsView: ({ onOpen }: { onOpen: (path: string) => void }) => (
     <button onClick={() => onOpen('run.csv')}>Open downloaded log</button>
@@ -40,11 +42,21 @@ describe('App navigation', () => {
 
     await user.click(screen.getByRole('button', { name: 'Settings' }))
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
-    expect(screen.getByText('No settings are available yet.')).toBeInTheDocument()
-    expect(screen.getByText('Future application preferences will appear here.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Plot layout' }))
+    expect(screen.getByRole('menuitemradio', { name: 'default' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    await user.click(screen.getByRole('menuitemradio', { name: 'bento' }))
+    expect(localStorage.getItem('dawg.live-layout-mode.v1')).toBe('bento')
 
     await user.click(screen.getByRole('button', { name: 'Live' }))
-    expect(screen.getByText('Live dashboard')).toBeVisible()
+    expect(screen.getByText('Live dashboard: bento')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    await user.click(screen.getByRole('button', { name: 'Plot layout' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'default' }))
+    await user.click(screen.getByRole('button', { name: 'Live' }))
+    expect(screen.getByText('Live dashboard: default')).toBeVisible()
   })
 
   it('opens a downloaded log in the viewer', async () => {

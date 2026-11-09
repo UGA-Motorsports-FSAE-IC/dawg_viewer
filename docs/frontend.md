@@ -13,8 +13,10 @@ src/state/         plot layout reducer
 src/data/          viewer session type and shared colours
 ```
 
-Settings currently provides a centered, vertically scrolling page for future
-application preferences. It has no controls yet.
+Settings provides a Live plot layout choice. Default keeps the vertical stack;
+Bento packs Live plots and the optional track map into a compact two-column grid.
+Returning to Default stacks plots in visible grid order, reading left to right,
+then top to bottom. Viewer worksheets are independent of this choice.
 
 ## Guiding rule: high-rate updates bypass React
 
