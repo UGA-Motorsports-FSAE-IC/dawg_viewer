@@ -3,15 +3,18 @@
 React + TypeScript + Tailwind, built with Vite, plots drawn with uPlot.
 
 ```
-src/App.tsx        tabs (Live / Logs / Viewer)
+src/App.tsx        tabs (Live / Logs / Viewer / Car / Settings)
 src/live/          live view: connection, store, follow mode, cards, plots, status bar
-src/views/         LiveView, LogsView, ViewerView
+src/views/         LiveView, LogsView, ViewerView, CarView, SettingsView
 src/viewer/        turning a loaded log into a viewer session
 src/plot/          uPlot wrapper and shared plot view state
 src/components/    channel list and viewer plot panel
 src/state/         plot layout reducer
 src/data/          viewer session type and shared colours
 ```
+
+Settings currently provides a centered, vertically scrolling page for future
+application preferences. It has no controls yet.
 
 ## Guiding rule: high-rate updates bypass React
 

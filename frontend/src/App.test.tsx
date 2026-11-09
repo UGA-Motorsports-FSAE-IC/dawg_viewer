@@ -34,6 +34,19 @@ vi.mock('./views/ViewerView', () => ({
 beforeEach(() => vi.mocked(openLog).mockReset())
 
 describe('App navigation', () => {
+  it('opens the empty Settings page and returns to the mounted Live view', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getByText('No settings are available yet.')).toBeInTheDocument()
+    expect(screen.getByText('Future application preferences will appear here.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Live' }))
+    expect(screen.getByText('Live dashboard')).toBeVisible()
+  })
+
   it('opens a downloaded log in the viewer', async () => {
     const user = userEvent.setup()
     vi.mocked(openLog).mockResolvedValue({

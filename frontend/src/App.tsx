@@ -10,15 +10,17 @@ import { openLog, pickAndOpenLog } from './viewer/openLog'
 import { CarView } from './views/CarView'
 import { LiveView } from './views/LiveView'
 import { LogsView } from './views/LogsView'
+import { SettingsView } from './views/SettingsView'
 import { ViewerView } from './views/ViewerView'
 
-type Tab = 'live' | 'logs' | 'viewer' | 'car'
+type Tab = 'live' | 'logs' | 'viewer' | 'car' | 'settings'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'live', label: 'Live' },
   { id: 'logs', label: 'Logs' },
   { id: 'viewer', label: 'Viewer' },
   { id: 'car', label: 'Car' },
+  { id: 'settings', label: 'Settings' },
 ]
 
 function App() {
@@ -191,6 +193,11 @@ function App() {
       {tab === 'car' && (
         <div className="min-h-0 flex-1">
           <CarView />
+        </div>
+      )}
+      {tab === 'settings' && (
+        <div className="min-h-0 flex-1">
+          <SettingsView />
         </div>
       )}
       {setups && (
